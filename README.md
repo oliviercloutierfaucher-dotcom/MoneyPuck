@@ -53,6 +53,7 @@ python3 tracker.py --army --region ca --season 2024 --bankroll 5000
 ```
 
 This returns JSON with each profile's thresholds and top opportunities so your team can compare conviction levels side-by-side.
+All army profiles now share one market snapshot per run for faster execution and consistent apples-to-apples comparisons.
 
 ---
 

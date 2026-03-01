@@ -6,7 +6,7 @@ from typing import Any
 
 from .models import TrackerConfig
 from .presentation import to_serializable
-from .service import run_tracker
+from .service import build_market_snapshot, score_snapshot
 
 
 ARMY_PROFILES: dict[str, dict[str, float]] = {
@@ -18,7 +18,11 @@ ARMY_PROFILES: dict[str, dict[str, float]] = {
 }
 
 
-def _run_profile(profile_name: str, base_config: TrackerConfig) -> dict[str, Any]:
+def _run_profile(
+    profile_name: str,
+    base_config: TrackerConfig,
+    shared_snapshot: object,
+) -> dict[str, Any]:
     tuning = ARMY_PROFILES[profile_name]
     profile_config = replace(
         base_config,
@@ -26,7 +30,7 @@ def _run_profile(profile_name: str, base_config: TrackerConfig) -> dict[str, Any
         min_ev=tuning["min_ev"],
         max_fraction_per_bet=tuning["max_fraction_per_bet"],
     )
-    recommendations = run_tracker(profile_config)
+    recommendations = score_snapshot(shared_snapshot, profile_config)
     serializable = to_serializable(recommendations)
 
     return {
@@ -42,9 +46,18 @@ def _run_profile(profile_name: str, base_config: TrackerConfig) -> dict[str, Any
 
 
 def run_agent_army(base_config: TrackerConfig, max_workers: int = 5) -> list[dict[str, Any]]:
+    """Run all profile agents off one shared data snapshot.
+
+    This avoids duplicate provider calls and keeps every profile compared on
+    the exact same market data instant.
+    """
+    shared_snapshot = build_market_snapshot(base_config)
     results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_run_profile, name, base_config): name for name in ARMY_PROFILES}
+        futures = {
+            pool.submit(_run_profile, name, base_config, shared_snapshot): name
+            for name in ARMY_PROFILES
+        }
         for future in as_completed(futures):
             profile = futures[future]
             try:
