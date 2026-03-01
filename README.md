@@ -18,6 +18,8 @@ The app is intentionally structured like a real desk with clear ownership:
 
 ## Fastest one-hour team demo (recommended)
 
+The preview UI now uses a data-dense, Quiver-inspired dashboard layout with KPI cards, controls, and a sortable-style table feel for team presentations.
+
 If you need to show a preview quickly, use the built-in web preview app:
 
 ```bash

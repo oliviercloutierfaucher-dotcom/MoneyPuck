@@ -22,7 +22,9 @@ def test_to_serializable_and_html_preview():
     serialized = to_serializable(recommendations)
     assert serialized[0]["home_team"] == "MTL"
     assert serialized[0]["recommended_stake"] == 30.0
+    assert serialized[0]["model_probability"] == 0.55
 
     html = render_html_preview(recommendations)
-    assert "MoneyPuck Edge Preview" in html
-    assert "TOR @ MTL" in html
+    assert "MoneyPuck Edge Intelligence" in html
+    assert "Quiver-style signal dashboard" in html
+    assert '"away_team": "TOR"' in html
