@@ -43,6 +43,19 @@ http://localhost:8080/?region=ca&min_edge=1.5&min_ev=0.01&bankroll=5000
 
 ---
 
+
+## Agent Army mode (parallel strategy desk)
+
+Run all five strategy profiles at once (scout, balanced, sniper, aggressive, capital-preservation):
+
+```bash
+python3 tracker.py --army --region ca --season 2024 --bankroll 5000
+```
+
+This returns JSON with each profile's thresholds and top opportunities so your team can compare conviction levels side-by-side.
+
+---
+
 ## CLI quick start
 
 ### 1) Requirements

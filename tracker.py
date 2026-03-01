@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 
+from app.army import run_agent_army
 from app.models import TrackerConfig
 from app.presentation import to_serializable
 from app.service import run_tracker
@@ -25,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bankroll", type=float, default=1000.0)
     parser.add_argument("--max-fraction-per-bet", type=float, default=0.03)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
+    parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     return parser.parse_args()
 
 
@@ -62,6 +64,11 @@ def main() -> int:
     )
 
     try:
+        if args.army:
+            army_results = run_agent_army(config)
+            print(json.dumps(army_results, indent=2))
+            return 0
+
         recommendations = run_tracker(config)
     except Exception as exc:
         print(f"Tracker run failed: {exc}")
