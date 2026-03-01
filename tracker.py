@@ -7,7 +7,9 @@ import argparse
 import json
 import os
 
+from app.army import run_agent_army
 from app.models import TrackerConfig
+from app.presentation import to_serializable
 from app.service import run_tracker
 
 SUPPORTED_REGIONS = {"ca", "us"}
@@ -24,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bankroll", type=float, default=1000.0)
     parser.add_argument("--max-fraction-per-bet", type=float, default=0.03)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
+    parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     return parser.parse_args()
 
 
@@ -61,31 +64,18 @@ def main() -> int:
     )
 
     try:
+        if args.army:
+            army_results = run_agent_army(config)
+            print(json.dumps(army_results, indent=2))
+            return 0
+
         recommendations = run_tracker(config)
     except Exception as exc:
         print(f"Tracker run failed: {exc}")
         return 2
 
     if args.json:
-        serializable = []
-        for item in recommendations:
-            c = item["candidate"]
-            serializable.append(
-                {
-                    "commence_time_utc": c.commence_time_utc,
-                    "home_team": c.home_team,
-                    "away_team": c.away_team,
-                    "side": c.side,
-                    "sportsbook": c.sportsbook,
-                    "american_odds": c.american_odds,
-                    "edge_probability_points": c.edge_probability_points,
-                    "expected_value_per_dollar": c.expected_value_per_dollar,
-                    "kelly_fraction": c.kelly_fraction,
-                    "recommended_stake": item["recommended_stake"],
-                    "stake_fraction": item["stake_fraction"],
-                }
-            )
-        print(json.dumps(serializable, indent=2))
+        print(json.dumps(to_serializable(recommendations), indent=2))
     else:
         _print_human(recommendations)
 

@@ -16,7 +16,48 @@ The app is intentionally structured like a real desk with clear ownership:
 
 ---
 
-## Quick start
+## Fastest one-hour team demo (recommended)
+
+The preview UI now uses a data-dense, Quiver-inspired dashboard layout with KPI cards, controls, and a sortable-style table feel for team presentations.
+
+If you need to show a preview quickly, use the built-in web preview app:
+
+```bash
+export ODDS_API_KEY="your_key_here"
+python3 -m app.web_preview
+```
+
+Then open:
+- HTML preview: `http://localhost:8080/`
+- JSON API: `http://localhost:8080/api/opportunities`
+
+No API key yet? Use demo mode:
+- `http://localhost:8080/?demo=1`
+- `http://localhost:8080/api/opportunities?demo=1`
+
+You can tune parameters in query string, for example:
+
+```text
+http://localhost:8080/?region=ca&min_edge=1.5&min_ev=0.01&bankroll=5000
+```
+
+---
+
+
+## Agent Army mode (parallel strategy desk)
+
+Run all five strategy profiles at once (scout, balanced, sniper, aggressive, capital-preservation):
+
+```bash
+python3 tracker.py --army --region ca --season 2024 --bankroll 5000
+```
+
+This returns JSON with each profile's thresholds and top opportunities so your team can compare conviction levels side-by-side.
+All army profiles now share one market snapshot per run for faster execution and consistent apples-to-apples comparisons.
+
+---
+
+## CLI quick start
 
 ### 1) Requirements
 
@@ -42,19 +83,28 @@ python3 tracker.py --json
 
 ## Option A: Docker (recommended)
 
-### Dockerfile
+### Build
 
 ```bash
 docker build -t moneypuck-edge:latest .
 ```
 
-### Run
+### Run CLI
 
 ```bash
 docker run --rm \
   -e ODDS_API_KEY="$ODDS_API_KEY" \
   moneypuck-edge:latest \
   python tracker.py --region ca --json
+```
+
+### Run web preview
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e ODDS_API_KEY="$ODDS_API_KEY" \
+  moneypuck-edge:latest \
+  python -m app.web_preview
 ```
 
 ## Option B: Scheduled job (Linux server / VM)

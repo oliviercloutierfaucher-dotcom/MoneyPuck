@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -29,3 +30,11 @@ class TrackerConfig:
     min_ev: float = 0.02
     bankroll: float = 1000.0
     max_fraction_per_bet: float = 0.03
+
+
+@dataclass(frozen=True)
+class MarketSnapshot:
+    """Single-cycle market snapshot to reuse across strategy profiles."""
+
+    odds_events: list[dict[str, Any]]
+    team_strength: dict[str, float]
