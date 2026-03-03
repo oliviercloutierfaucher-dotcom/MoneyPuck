@@ -51,6 +51,7 @@ class TrackerConfig:
     max_fraction_per_bet: float = 0.03
     kelly_fraction: float = 0.5
     max_nightly_exposure: float = 0.15
+    persist: bool = False
 
 
 @dataclass(frozen=True)

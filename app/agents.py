@@ -22,6 +22,7 @@ from .math_utils import (
     regress_to_mean,
 )
 from .models import TeamMetrics, TrackerConfig, ValueCandidate
+from .situational import situational_adjustments
 
 
 # ---------------------------------------------------------------------------
@@ -247,8 +248,13 @@ class EdgeScoringAgent:
         home_team: str,
         away_team: str,
         strength: dict[str, TeamMetrics],
+        sit_adj: float = 0.0,
     ) -> tuple[float, float, float]:
-        """Returns (home_prob, away_prob, confidence)."""
+        """Returns (home_prob, away_prob, confidence).
+
+        *sit_adj* is a situational probability adjustment applied to the
+        home win probability (from Phase 5 situational factors).
+        """
         home_metrics = strength.get(home_team)
         away_metrics = strength.get(away_team)
         if home_metrics is None or away_metrics is None:
@@ -258,6 +264,10 @@ class EdgeScoringAgent:
         away_z = away_metrics.away_strength
 
         home_prob, away_prob = logistic_win_probability(home_z, away_z)
+        # Apply situational adjustment (rest, travel, etc.)
+        home_prob = max(0.01, min(0.99, home_prob + sit_adj))
+        away_prob = 1.0 - home_prob
+
         conf = prediction_confidence(
             home_metrics.games_played, away_metrics.games_played
         )
@@ -268,14 +278,28 @@ class EdgeScoringAgent:
         odds_events: list[dict[str, Any]],
         team_strength: dict[str, TeamMetrics],
         config: TrackerConfig,
+        games_rows: list[dict[str, str]] | None = None,
     ) -> list[ValueCandidate]:
         candidates: list[ValueCandidate] = []
         for event in odds_events:
             home_team = event.get("home_team", "")
             away_team = event.get("away_team", "")
             commence = event.get("commence_time", "")
+
+            # Phase 5: situational adjustments (rest, travel)
+            sit_adj = 0.0
+            if games_rows:
+                game_date = commence[:10] if commence else ""
+                if game_date:
+                    sit = situational_adjustments(
+                        home_team, away_team, game_date, games_rows
+                    )
+                    sit_adj = sit.get("total_adj", 0.0)
+
             home_prob_model, away_prob_model, conf = (
-                self._estimate_win_probability(home_team, away_team, team_strength)
+                self._estimate_win_probability(
+                    home_team, away_team, team_strength, sit_adj
+                )
             )
 
             for bookmaker in event.get("bookmakers", []):

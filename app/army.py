@@ -22,6 +22,7 @@ def _run_profile(
     profile_name: str,
     base_config: TrackerConfig,
     shared_snapshot: object,
+    games_rows: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     tuning = ARMY_PROFILES[profile_name]
     profile_config = replace(
@@ -32,7 +33,7 @@ def _run_profile(
         kelly_fraction=tuning.get("kelly_fraction", base_config.kelly_fraction),
         max_nightly_exposure=tuning.get("max_nightly_exposure", base_config.max_nightly_exposure),
     )
-    recommendations = score_snapshot(shared_snapshot, profile_config)
+    recommendations = score_snapshot(shared_snapshot, profile_config, games_rows)
     serializable = to_serializable(recommendations)
 
     return {
@@ -53,11 +54,11 @@ def run_agent_army(base_config: TrackerConfig, max_workers: int = 5) -> list[dic
     This avoids duplicate provider calls and keeps every profile compared on
     the exact same market data instant.
     """
-    shared_snapshot = build_market_snapshot(base_config)
+    shared_snapshot, games_rows = build_market_snapshot(base_config)
     results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_run_profile, name, base_config, shared_snapshot): name
+            pool.submit(_run_profile, name, base_config, shared_snapshot, games_rows): name
             for name in ARMY_PROFILES
         }
         for future in as_completed(futures):

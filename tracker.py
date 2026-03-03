@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-nightly-exposure", type=float, default=0.15, help="Max total stake per night as fraction of bankroll")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
     parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
+    parser.add_argument("--persist", action="store_true", help="Save predictions to SQLite database")
+    parser.add_argument("--validate", action="store_true", help="Print model health report from stored predictions")
     return parser.parse_args()
 
 
@@ -65,9 +67,21 @@ def main() -> int:
         max_fraction_per_bet=args.max_fraction_per_bet,
         kelly_fraction=args.kelly_fraction,
         max_nightly_exposure=args.max_nightly_exposure,
+        persist=args.persist,
     )
 
     try:
+        # Phase 4: model health report from stored predictions
+        if args.validate:
+            from app.database import TrackerDatabase
+            from app.validation import model_health_report
+            with TrackerDatabase() as db:
+                settled = db.get_predictions()
+                settled = [s for s in settled if s.get("outcome") is not None]
+            report = model_health_report(settled)
+            print(json.dumps(report, indent=2))
+            return 0
+
         if args.army:
             army_results = run_agent_army(config)
             print(json.dumps(army_results, indent=2))
