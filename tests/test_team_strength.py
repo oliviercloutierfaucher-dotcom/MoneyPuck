@@ -55,18 +55,17 @@ def test_composite_strength_default_weights():
 
 
 def test_composite_strength_mixed():
+    """Verify composite_strength with explicit weights produces expected result."""
     metrics = {
         "xg_share": 2.0,
         "corsi_share": -1.0,
         "high_danger_share": 0.0,
-        "shooting_pct": 0.0,
-        "save_pct": 0.0,
-        "pp_xg_per_60": 0.0,
-        "pk_xg_against_per_60": 0.0,
     }
-    result = composite_strength(metrics)
-    # 0.35*2 + 0.15*(-1) = 0.55 / 1.0 = 0.55
-    assert abs(result - 0.55) < 0.001
+    weights = {"xg_share": 0.35, "corsi_share": 0.15, "high_danger_share": 0.20}
+    result = composite_strength(metrics, weights)
+    # 0.35*2 + 0.15*(-1) + 0.20*0 = 0.55 / 0.70 = 0.7857
+    expected = (0.35 * 2.0 + 0.15 * -1.0 + 0.20 * 0.0) / 0.70
+    assert abs(result - expected) < 0.001
 
 
 def _make_game_row(home, away, xg=0.5, corsi=0.5, hd_for=5, hd_against=5,

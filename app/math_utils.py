@@ -99,13 +99,27 @@ def composite_strength(
 
 
 DEFAULT_METRIC_WEIGHTS: dict[str, float] = {
-    "xg_share": 0.35,
-    "corsi_share": 0.15,
-    "high_danger_share": 0.20,
-    "shooting_pct": 0.10,
-    "save_pct": 0.10,
-    "pp_xg_per_60": 0.05,
-    "pk_xg_against_per_60": 0.05,
+    # Core performance (55%)
+    "xg_share": 0.12,
+    "score_adj_xg_share": 0.14,     # Score-adjusted is more predictive than raw xG
+    "flurry_adj_xg_share": 0.10,    # Penalizes rebound shot clusters
+    "high_danger_share": 0.10,
+    "hd_xg_share": 0.09,            # High-danger xG share
+    # Possession & shot quality (18%)
+    "corsi_share": 0.06,
+    "fenwick_share": 0.06,
+    "md_xg_share": 0.06,            # Medium-danger quality
+    # Execution (12%)
+    "shooting_pct": 0.06,
+    "save_pct": 0.06,
+    # Special teams (6%)
+    "pp_xg_per_60": 0.03,
+    "pk_xg_against_per_60": 0.03,
+    # Puck management (9%)
+    "rebound_control": 0.03,        # Offensive rebound creation
+    "faceoff_pct": 0.03,
+    "takeaway_ratio": 0.02,
+    "dzone_giveaway_rate": 0.01,    # D-zone turnovers (inverted: lower = better)
 }
 
 

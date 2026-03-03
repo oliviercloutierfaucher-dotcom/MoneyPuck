@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from .data_sources import fetch_moneypuck_games, fetch_odds, safe_float
+from .data_sources import fetch_moneypuck_games, fetch_odds, fetch_team_game_by_game, safe_float
 from .logging_config import get_logger
 from .math_utils import (
     DEFAULT_METRIC_WEIGHTS,
@@ -45,6 +45,14 @@ class MoneyPuckDataAgent:
     name = "moneypuck-data-agent"
 
     def run(self, config: TrackerConfig) -> list[dict[str, str]]:
+        """Fetch game data, preferring rich team game-by-game data."""
+        try:
+            rows = fetch_team_game_by_game(config.season)
+            if rows:
+                log.info("Using team game-by-game data (%d rows)", len(rows))
+                return rows
+        except Exception as exc:
+            log.warning("Team game-by-game fetch failed, falling back to bulk CSV: %s", exc)
         return fetch_moneypuck_games(config.season)
 
 
@@ -74,68 +82,17 @@ class TeamStrengthAgent:
         # ---- 1. Accumulate per-team, per-venue raw metric lists ----
         team_games: dict[str, list[dict]] = defaultdict(list)
 
-        for row in games_rows:
-            home = row["homeTeamCode"]
-            away = row["awayTeamCode"]
-            game_date = row.get("gameDate", today)[:10]
-            try:
-                days_ago = days_between(game_date, today)
-            except ValueError:
-                days_ago = 0
-            weight = exponential_decay_weight(days_ago, half_life)
+        # Detect whether we have team-game-by-game data (has 'playerTeam')
+        # or legacy bulk games.csv (has 'homeTeamCode')
+        is_team_gbg = bool(games_rows and "playerTeam" in games_rows[0])
 
-            xg_pct = safe_float(row, "xGoalsPercentage", 0.5)
-            corsi_pct = safe_float(row, "corsiPercentage", 0.5)
-            hd_for = safe_float(row, "highDangerShotsFor")
-            hd_against = safe_float(row, "highDangerShotsAgainst")
-            goals_for = safe_float(row, "goalsFor")
-            goals_against = safe_float(row, "goalsAgainst")
-            shots_for = safe_float(row, "shotsOnGoalFor")
-            shots_against = safe_float(row, "shotsOnGoalAgainst")
-            xg_for = safe_float(row, "xGoalsFor")
-            xg_against = safe_float(row, "xGoalsAgainst")
-            pim_for = safe_float(row, "penaltiesFor")
-            pim_against = safe_float(row, "penaltiesAgainst")
-
-            hd_total = hd_for + hd_against
-            hd_share = hd_for / hd_total if hd_total else 0.5
-            sh_pct = goals_for / shots_for if shots_for else 0.08
-            sv_pct = 1 - (goals_against / shots_against) if shots_against else 0.91
-            pp_xg = xg_for  # proxy (full-game xG offensive rate)
-            pk_xg_a = xg_against
-
-            entry = {
-                "weight": weight,
-                "xg_share": xg_pct,
-                "corsi_share": corsi_pct,
-                "high_danger_share": hd_share,
-                "shooting_pct": sh_pct,
-                "save_pct": sv_pct,
-                "pp_xg_per_60": pp_xg,
-                "pk_xg_against_per_60": pk_xg_a,
-            }
-
-            # Home team sees these metrics as-is
-            team_games[home].append({**entry, "venue": "home"})
-            # Away team: flip share metrics
-            away_entry = {
-                "weight": weight,
-                "xg_share": 1 - xg_pct,
-                "corsi_share": 1 - corsi_pct,
-                "high_danger_share": 1 - hd_share,
-                "shooting_pct": goals_against / shots_against if shots_against else 0.08,
-                "save_pct": 1 - (goals_for / shots_for) if shots_for else 0.91,
-                "pp_xg_per_60": xg_against,
-                "pk_xg_against_per_60": xg_for,
-                "venue": "away",
-            }
-            team_games[away].append(away_entry)
+        if is_team_gbg:
+            self._extract_team_gbg(games_rows, team_games, today, half_life)
+        else:
+            self._extract_legacy(games_rows, team_games, today, half_life)
 
         # ---- 2. Weighted averages per team ----
-        METRIC_KEYS = [
-            "xg_share", "corsi_share", "high_danger_share",
-            "shooting_pct", "save_pct", "pp_xg_per_60", "pk_xg_against_per_60",
-        ]
+        METRIC_KEYS = list(DEFAULT_METRIC_WEIGHTS.keys())
         team_raw: dict[str, dict[str, float]] = {}
         team_home_raw: dict[str, dict[str, float]] = {}
         team_away_raw: dict[str, dict[str, float]] = {}
@@ -225,14 +182,25 @@ class TeamStrengthAgent:
 
             raw = team_raw[team]
             result[team] = TeamMetrics(
-                xg_share=raw["xg_share"],
-                corsi_share=raw["corsi_share"],
-                high_danger_share=raw["high_danger_share"],
-                shooting_pct=raw["shooting_pct"],
-                save_pct=raw["save_pct"],
-                pp_xg_per_60=raw["pp_xg_per_60"],
-                pk_xg_against_per_60=raw["pk_xg_against_per_60"],
-                recent_form=raw["xg_share"],  # decay-weighted xG is the recent form
+                xg_share=raw.get("xg_share", 0.5),
+                corsi_share=raw.get("corsi_share", 0.5),
+                high_danger_share=raw.get("high_danger_share", 0.5),
+                shooting_pct=raw.get("shooting_pct", 0.08),
+                save_pct=raw.get("save_pct", 0.91),
+                pp_xg_per_60=raw.get("pp_xg_per_60", 0.0),
+                pk_xg_against_per_60=raw.get("pk_xg_against_per_60", 0.0),
+                recent_form=raw.get("xg_share", 0.5),
+                # Advanced metrics
+                score_adj_xg_share=raw.get("score_adj_xg_share", 0.5),
+                flurry_adj_xg_share=raw.get("flurry_adj_xg_share", 0.5),
+                fenwick_share=raw.get("fenwick_share", 0.5),
+                hd_xg_share=raw.get("hd_xg_share", 0.5),
+                md_xg_share=raw.get("md_xg_share", 0.5),
+                rebound_control=raw.get("rebound_control", 0.5),
+                faceoff_pct=raw.get("faceoff_pct", 0.5),
+                takeaway_ratio=raw.get("takeaway_ratio", 0.5),
+                dzone_giveaway_rate=raw.get("dzone_giveaway_rate", 0.0),
+                # Composites
                 home_strength=home_comp,
                 away_strength=away_comp,
                 games_played=n,
@@ -242,6 +210,200 @@ class TeamStrengthAgent:
             )
 
         return result
+
+    @staticmethod
+    def _extract_team_gbg(
+        games_rows: list[dict[str, str]],
+        team_games: dict[str, list[dict]],
+        today: str,
+        half_life: float,
+    ) -> None:
+        """Extract metrics from MoneyPuck team game-by-game CSVs (100+ columns)."""
+        for row in games_rows:
+            # Only use 'all' situation rows for team-level aggregation
+            if row.get("situation", "all") != "all":
+                continue
+
+            team = row.get("playerTeam", row.get("team", ""))
+            if not team:
+                continue
+            venue = row.get("home_or_away", "home")
+            game_date = row.get("gameDate", today)[:10]
+            try:
+                days_ago = days_between(game_date, today)
+            except ValueError:
+                days_ago = 0
+            weight = exponential_decay_weight(days_ago, half_life)
+
+            # Core share metrics
+            xg_pct = safe_float(row, "xGoalsPercentage", 0.5)
+            corsi_pct = safe_float(row, "corsiPercentage", 0.5)
+            fenwick_pct = safe_float(row, "fenwickPercentage", 0.5)
+
+            # Shots & goals
+            hd_for = safe_float(row, "highDangerShotsFor")
+            hd_against = safe_float(row, "highDangerShotsAgainst")
+            goals_for = safe_float(row, "goalsFor")
+            goals_against = safe_float(row, "goalsAgainst")
+            shots_for = safe_float(row, "shotsOnGoalFor")
+            shots_against = safe_float(row, "shotsOnGoalAgainst")
+
+            # Advanced xG metrics (MoneyPuck team game-by-game exclusive)
+            score_adj_xg_for = safe_float(row, "scoreVenueAdjustedxGoalsFor")
+            score_adj_xg_against = safe_float(row, "scoreVenueAdjustedxGoalsAgainst")
+            flurry_adj_xg_for = safe_float(row, "flurryAdjustedxGoalsFor")
+            flurry_adj_xg_against = safe_float(row, "flurryAdjustedxGoalsAgainst")
+
+            # Danger zone xG breakdowns
+            hd_xg_for = safe_float(row, "highDangerxGoalsFor")
+            hd_xg_against = safe_float(row, "highDangerxGoalsAgainst")
+            md_xg_for = safe_float(row, "mediumDangerxGoalsFor")
+            md_xg_against = safe_float(row, "mediumDangerxGoalsAgainst")
+
+            # Rebound control
+            rebound_xg_for = safe_float(row, "reboundxGoalsFor")
+            rebound_xg_against = safe_float(row, "reboundxGoalsAgainst")
+
+            # Faceoffs
+            fo_won_for = safe_float(row, "faceOffsWonFor")
+            fo_won_against = safe_float(row, "faceOffsWonAgainst")
+
+            # Puck management
+            takeaways_for = safe_float(row, "takeawaysFor")
+            giveaways_for = safe_float(row, "giveawaysFor")
+            dzone_ga_for = safe_float(row, "dZoneGiveawaysFor")
+
+            xg_for_raw = safe_float(row, "xGoalsFor")
+            xg_against_raw = safe_float(row, "xGoalsAgainst")
+
+            # Compute share metrics
+            hd_total = hd_for + hd_against
+            hd_share = hd_for / hd_total if hd_total else 0.5
+
+            score_adj_total = score_adj_xg_for + score_adj_xg_against
+            score_adj_share = score_adj_xg_for / score_adj_total if score_adj_total else 0.5
+
+            flurry_total = flurry_adj_xg_for + flurry_adj_xg_against
+            flurry_share = flurry_adj_xg_for / flurry_total if flurry_total else 0.5
+
+            hd_xg_total = hd_xg_for + hd_xg_against
+            hd_xg_share = hd_xg_for / hd_xg_total if hd_xg_total else 0.5
+
+            md_xg_total = md_xg_for + md_xg_against
+            md_xg_share = md_xg_for / md_xg_total if md_xg_total else 0.5
+
+            rebound_total = rebound_xg_for + rebound_xg_against
+            rebound_share = rebound_xg_for / rebound_total if rebound_total else 0.5
+
+            fo_total = fo_won_for + fo_won_against
+            fo_pct = fo_won_for / fo_total if fo_total else 0.5
+
+            ta_ga_total = takeaways_for + giveaways_for
+            ta_ratio = takeaways_for / ta_ga_total if ta_ga_total else 0.5
+
+            sh_pct = goals_for / shots_for if shots_for else 0.08
+            sv_pct = 1 - (goals_against / shots_against) if shots_against else 0.91
+
+            entry = {
+                "weight": weight,
+                "xg_share": xg_pct,
+                "corsi_share": corsi_pct,
+                "fenwick_share": fenwick_pct,
+                "high_danger_share": hd_share,
+                "score_adj_xg_share": score_adj_share,
+                "flurry_adj_xg_share": flurry_share,
+                "hd_xg_share": hd_xg_share,
+                "md_xg_share": md_xg_share,
+                "rebound_control": rebound_share,
+                "faceoff_pct": fo_pct,
+                "takeaway_ratio": ta_ratio,
+                "dzone_giveaway_rate": dzone_ga_for,
+                "shooting_pct": sh_pct,
+                "save_pct": sv_pct,
+                "pp_xg_per_60": xg_for_raw,
+                "pk_xg_against_per_60": xg_against_raw,
+                "venue": venue,
+            }
+            team_games[team].append(entry)
+
+    @staticmethod
+    def _extract_legacy(
+        games_rows: list[dict[str, str]],
+        team_games: dict[str, list[dict]],
+        today: str,
+        half_life: float,
+    ) -> None:
+        """Extract metrics from legacy bulk games.csv (backward compatible)."""
+        for row in games_rows:
+            home = row["homeTeamCode"]
+            away = row["awayTeamCode"]
+            game_date = row.get("gameDate", today)[:10]
+            try:
+                days_ago = days_between(game_date, today)
+            except ValueError:
+                days_ago = 0
+            weight = exponential_decay_weight(days_ago, half_life)
+
+            xg_pct = safe_float(row, "xGoalsPercentage", 0.5)
+            corsi_pct = safe_float(row, "corsiPercentage", 0.5)
+            fenwick_pct = safe_float(row, "fenwickPercentage", 0.5)
+            hd_for = safe_float(row, "highDangerShotsFor")
+            hd_against = safe_float(row, "highDangerShotsAgainst")
+            goals_for = safe_float(row, "goalsFor")
+            goals_against = safe_float(row, "goalsAgainst")
+            shots_for = safe_float(row, "shotsOnGoalFor")
+            shots_against = safe_float(row, "shotsOnGoalAgainst")
+            xg_for = safe_float(row, "xGoalsFor")
+            xg_against = safe_float(row, "xGoalsAgainst")
+
+            hd_total = hd_for + hd_against
+            hd_share = hd_for / hd_total if hd_total else 0.5
+            sh_pct = goals_for / shots_for if shots_for else 0.08
+            sv_pct = 1 - (goals_against / shots_against) if shots_against else 0.91
+
+            entry = {
+                "weight": weight,
+                "xg_share": xg_pct,
+                "corsi_share": corsi_pct,
+                "fenwick_share": fenwick_pct,
+                "high_danger_share": hd_share,
+                "score_adj_xg_share": xg_pct,       # fallback: use raw xG
+                "flurry_adj_xg_share": xg_pct,      # fallback: use raw xG
+                "hd_xg_share": hd_share,             # fallback: use HD shot share
+                "md_xg_share": 0.5,                  # no data
+                "rebound_control": 0.5,              # no data
+                "faceoff_pct": 0.5,                  # no data
+                "takeaway_ratio": 0.5,               # no data
+                "dzone_giveaway_rate": 0.0,          # no data
+                "shooting_pct": sh_pct,
+                "save_pct": sv_pct,
+                "pp_xg_per_60": xg_for,
+                "pk_xg_against_per_60": xg_against,
+            }
+
+            team_games[home].append({**entry, "venue": "home"})
+            # Away team: flip share metrics
+            away_entry = {
+                "weight": weight,
+                "xg_share": 1 - xg_pct,
+                "corsi_share": 1 - corsi_pct,
+                "fenwick_share": 1 - fenwick_pct,
+                "high_danger_share": 1 - hd_share,
+                "score_adj_xg_share": 1 - xg_pct,
+                "flurry_adj_xg_share": 1 - xg_pct,
+                "hd_xg_share": 1 - hd_share,
+                "md_xg_share": 0.5,
+                "rebound_control": 0.5,
+                "faceoff_pct": 0.5,
+                "takeaway_ratio": 0.5,
+                "dzone_giveaway_rate": 0.0,
+                "shooting_pct": goals_against / shots_against if shots_against else 0.08,
+                "save_pct": 1 - (goals_for / shots_for) if shots_for else 0.91,
+                "pp_xg_per_60": xg_against,
+                "pk_xg_against_per_60": xg_for,
+                "venue": "away",
+            }
+            team_games[away].append(away_entry)
 
     @staticmethod
     def _z_score_all(
@@ -258,9 +420,9 @@ class TeamStrengthAgent:
             if std == 0:
                 std = 1.0
             for i, team in enumerate(teams):
-                # Invert pk_xg_against_per_60 (lower is better)
+                # Invert metrics where lower is better
                 z = (vals[i] - mean) / std
-                if key == "pk_xg_against_per_60":
+                if key in ("pk_xg_against_per_60", "dzone_giveaway_rate"):
                     z = -z
                 result[team][key] = float(z)
         return result

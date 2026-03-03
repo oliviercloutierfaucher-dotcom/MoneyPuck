@@ -16,6 +16,15 @@ log = get_logger("data_sources")
 
 ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds"
 MONEYPUCK_BASE = "https://moneypuck.com/moneypuck/playerData/games.csv"
+MONEYPUCK_TEAM_GAME_BASE = "https://moneypuck.com/moneypuck/playerData/teamGameByGame"
+
+# All 32 NHL teams (2024-25 onward, UTA replaced ARI)
+NHL_TEAMS = [
+    "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
+    "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NJD",
+    "NSH", "NYI", "NYR", "OTT", "PHI", "PIT", "SEA", "SJS",
+    "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH",
+]
 
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2  # seconds
@@ -164,3 +173,51 @@ def fetch_moneypuck_games(season: int) -> list[dict[str, str]]:
     filtered = [row for row in rows if _safe_int(row.get("season", ""), 0) == season]
     log.info("Loaded %d games for season %d (from %d total rows)", len(filtered), season, len(rows))
     return filtered
+
+
+def fetch_team_game_by_game(
+    season: int,
+    teams: list[str] | None = None,
+) -> list[dict[str, str]]:
+    """Fetch per-team game-by-game data from MoneyPuck with 100+ advanced metrics.
+
+    This endpoint provides score-adjusted xG, flurry-adjusted xG, danger-zone
+    breakdowns, rebound control, faceoffs, giveaways/takeaways, and more.
+
+    Falls back to the bulk games.csv if per-team fetches fail.
+    """
+    target_teams = teams or NHL_TEAMS
+    # MoneyPuck uses the season start year (e.g., 2024 for 2024-25 season,
+    # but the team game-by-game endpoint uses the next year: 2025 for 2024-25)
+    mp_year = season + 1
+
+    all_rows: list[dict[str, str]] = []
+    failed_teams: list[str] = []
+
+    for team in target_teams:
+        url = f"{MONEYPUCK_TEAM_GAME_BASE}/{mp_year}/regular/{team}.csv"
+        try:
+            data = _fetch_with_retry(url, label=f"MoneyPuck {team}", timeout=20)
+            text = data.decode("utf-8")
+            rows = list(csv.DictReader(io.StringIO(text)))
+            all_rows.extend(rows)
+            log.debug("Fetched %d game rows for %s", len(rows), team)
+        except Exception as exc:
+            log.warning("Failed to fetch team game data for %s: %s", team, exc)
+            failed_teams.append(team)
+
+    if failed_teams:
+        log.warning(
+            "Failed to fetch %d/%d teams: %s",
+            len(failed_teams), len(target_teams), failed_teams,
+        )
+
+    if not all_rows:
+        log.warning("No team game-by-game data fetched, falling back to bulk CSV")
+        return fetch_moneypuck_games(season)
+
+    log.info(
+        "Loaded %d team-game rows across %d teams (season %d)",
+        len(all_rows), len(target_teams) - len(failed_teams), season,
+    )
+    return all_rows

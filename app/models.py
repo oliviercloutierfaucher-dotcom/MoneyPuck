@@ -8,6 +8,7 @@ from typing import Any
 class TeamMetrics:
     """Multi-factor team strength profile."""
 
+    # Core share metrics (percentage-based, 0-1)
     xg_share: float = 0.5
     corsi_share: float = 0.5
     high_danger_share: float = 0.5
@@ -16,10 +17,22 @@ class TeamMetrics:
     pp_xg_per_60: float = 0.0
     pk_xg_against_per_60: float = 0.0
     recent_form: float = 0.5
+    # Advanced metrics from MoneyPuck team game-by-game data
+    score_adj_xg_share: float = 0.5       # Score-venue adjusted xG%
+    flurry_adj_xg_share: float = 0.5      # Flurry-adjusted xG% (penalizes rebounds)
+    fenwick_share: float = 0.5            # Fenwick% (unblocked shot attempts)
+    hd_xg_share: float = 0.5             # High-danger xG share
+    md_xg_share: float = 0.5             # Medium-danger xG share
+    rebound_control: float = 0.5          # Rebound xG share (offensive rebounding)
+    faceoff_pct: float = 0.5             # Faceoff win percentage
+    takeaway_ratio: float = 0.5          # Takeaways / (takeaways + giveaways)
+    dzone_giveaway_rate: float = 0.0     # D-zone giveaways per game (lower is better)
+    # Composites & venue splits
     home_strength: float = 0.0
     away_strength: float = 0.0
     games_played: int = 0
     composite: float = 0.0
+    # Goalie enrichment
     starter_save_pct: float = 0.0
     starter_gaa: float = 0.0
 
