@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from typing import Any
@@ -68,7 +69,10 @@ def run_agent_army(base_config: TrackerConfig, max_workers: int = 5) -> list[dic
         for future in as_completed(futures):
             profile = futures[future]
             try:
-                results.append(future.result())
+                results.append(future.result(timeout=45))
+            except concurrent.futures.TimeoutError:
+                log.error("Profile '%s' timed out after 45s", profile)
+                results.append({"profile": profile, "error": "timed out", "count": 0, "top_opportunities": []})
             except Exception as exc:
                 log.error("Profile '%s' failed: %s", profile, exc)
                 results.append({"profile": profile, "error": str(exc), "count": 0, "top_opportunities": []})

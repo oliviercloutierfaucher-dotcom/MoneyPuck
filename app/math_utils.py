@@ -89,13 +89,16 @@ def composite_strength(
     """
     if weights is None:
         weights = DEFAULT_METRIC_WEIGHTS
-    total_w = 0.0
+    # Always divide by the full weight sum, not just available weights.
+    # This pulls the composite toward 0.0 (league average) when metrics
+    # are missing, penalizing sparse early-season data instead of
+    # artificially inflating the remaining signals.
+    full_w = sum(weights.values())
     total = 0.0
     for name, w in weights.items():
         if name in metrics:
             total += metrics[name] * w
-            total_w += w
-    return total / total_w if total_w else 0.0
+    return total / full_w if full_w else 0.0
 
 
 DEFAULT_METRIC_WEIGHTS: dict[str, float] = {
@@ -167,7 +170,8 @@ def prediction_confidence(
     it reaches 67%.
     """
     avg = (games_a + games_b) / 2.0
-    return min(1.0, avg / (avg + min_games))
+    base_confidence = min(1.0, avg / (avg + min_games))
+    return max(0.05, base_confidence)
 
 
 def edge_adjusted_confidence(
@@ -187,7 +191,7 @@ def edge_adjusted_confidence(
     excess = max(0.0, abs(edge_pp) - edge_threshold)
     # Penalty scales linearly: every 8pp above threshold costs max_edge_penalty
     penalty = min(max_edge_penalty, excess / edge_threshold * max_edge_penalty)
-    return max(0.0, min(1.0, base_confidence - penalty))
+    return max(0.05, min(1.0, base_confidence - penalty))
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +206,19 @@ def fractional_kelly(
 
 
 def confidence_adjusted_kelly(
-    model_probability: float,
+    model_prob: float,
     decimal_odds: float,
     confidence: float,
     fraction: float = 0.5,
 ) -> float:
-    """Kelly scaled by both fractional multiplier and model confidence."""
-    confidence = _clamp_probability(confidence)
-    return fractional_kelly(model_probability, decimal_odds, fraction) * confidence
+    """Kelly with confidence-adjusted probability.
+
+    Low confidence pulls model_prob toward 0.5 (no-edge prior)
+    before computing Kelly, rather than scaling the stake post-hoc.
+    """
+    confidence = max(0.0, min(1.0, confidence))
+    adjusted_prob = confidence * model_prob + (1 - confidence) * 0.5
+    return fractional_kelly(adjusted_prob, decimal_odds, fraction)
 
 
 # ---------------------------------------------------------------------------

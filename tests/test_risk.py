@@ -24,14 +24,20 @@ def test_confidence_adjusted_kelly_full_confidence():
 
 
 def test_confidence_adjusted_kelly_half_confidence():
-    base = fractional_kelly(0.55, 2.1, fraction=0.5)
+    # confidence=0.5 blends model_prob toward 0.5:
+    # adjusted_prob = 0.5 * 0.55 + 0.5 * 0.5 = 0.525
+    expected = fractional_kelly(0.525, 2.1, fraction=0.5)
     adj = confidence_adjusted_kelly(0.55, 2.1, confidence=0.5, fraction=0.5)
-    assert abs(adj - base * 0.5) < 0.0001
+    assert abs(adj - expected) < 0.0001
 
 
 def test_confidence_adjusted_kelly_zero_confidence():
+    # confidence=0 means adjusted_prob = 0.5 (the no-edge prior)
+    # With odds 2.1, Kelly at prob=0.5 is still slightly positive
+    expected = fractional_kelly(0.5, 2.1, fraction=0.5)
     adj = confidence_adjusted_kelly(0.55, 2.1, confidence=0.0, fraction=0.5)
-    assert adj == 0.0
+    assert abs(adj - expected) < 0.0001
+    assert adj > 0.0  # blending toward 0.5 with favorable odds is still +EV
 
 
 def _make_candidate(side, sportsbook, odds, commence="2026-01-01T00:00:00Z",
@@ -100,6 +106,7 @@ def test_risk_agent_confidence_reduces_stake():
     low_conf = [_make_candidate("MTL", "BookA", 120, confidence=0.3)]
     config = TrackerConfig(
         odds_api_key="x", bankroll=1000.0, min_edge=0.0, min_ev=-1.0,
+        max_fraction_per_bet=0.15,  # raise cap so confidence difference is visible
     )
     rec_high = RiskAgent().run(high_conf, config)
     rec_low = RiskAgent().run(low_conf, config)

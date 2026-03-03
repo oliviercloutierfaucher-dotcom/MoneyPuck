@@ -35,7 +35,7 @@ def test_logistic_symmetry():
 
 def test_prediction_confidence_zero_games():
     conf = prediction_confidence(0, 0)
-    assert conf == 0.0
+    assert conf == 0.05  # minimum floor prevents zero-confidence lockout
 
 
 def test_prediction_confidence_many_games():
