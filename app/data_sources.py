@@ -18,6 +18,61 @@ ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds"
 MONEYPUCK_BASE = "https://moneypuck.com/moneypuck/playerData/games.csv"
 MONEYPUCK_TEAM_GAME_BASE = "https://moneypuck.com/moneypuck/playerData/teamGameByGame"
 
+# ---------------------------------------------------------------------------
+# Quebec & Canadian sportsbook configuration
+# Maps The Odds API bookmaker keys to display names
+# ---------------------------------------------------------------------------
+
+QUEBEC_BOOKS: dict[str, str] = {
+    "bet365": "Bet365",
+    "betway": "Betway",
+    "bet99": "Bet99",
+    "fanduel": "FanDuel",
+    "draftkings": "DraftKings",
+    "betmgm": "BetMGM",
+    "pinnacle": "Pinnacle",
+    "betvictor": "BetVictor",
+    "pointsbetus": "PointsBet",
+    "betrivers": "BetRivers",
+    "betano": "Betano",
+    "northstar": "NorthStar",
+    "espacejeuxca": "Mise-o-jeu",
+}
+
+ONTARIO_BOOKS: dict[str, str] = {
+    **QUEBEC_BOOKS,
+    "williamhill": "William Hill",
+    "unibet": "Unibet",
+    "theScore": "theScore Bet",
+    "coolbet": "Coolbet",
+    "888sport": "888sport",
+}
+
+US_BOOKS: dict[str, str] = {
+    "draftkings": "DraftKings",
+    "fanduel": "FanDuel",
+    "betmgm": "BetMGM",
+    "caesars": "Caesars",
+    "pointsbetus": "PointsBet",
+    "betrivers": "BetRivers",
+    "unibet": "Unibet",
+    "williamhill": "William Hill",
+    "wynnbet": "WynnBET",
+    "twinspires": "TwinSpires",
+}
+
+REGION_BOOK_PRESETS: dict[str, dict[str, str]] = {
+    "qc": QUEBEC_BOOKS,
+    "on": ONTARIO_BOOKS,
+    "ca": QUEBEC_BOOKS,  # Default Canadian to QC books
+    "us": US_BOOKS,
+}
+
+
+def get_books_for_region(region: str) -> dict[str, str]:
+    """Return bookmaker key -> display name mapping for a region."""
+    return REGION_BOOK_PRESETS.get(region, QUEBEC_BOOKS)
+
 # All 32 NHL teams (2024-25 onward, UTA replaced ARI)
 NHL_TEAMS = [
     "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
