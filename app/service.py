@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -35,9 +36,36 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
         odds_future = pool.submit(market_agent.run, config)
         moneypuck_future = pool.submit(data_agent.run, config)
         goalie_future = pool.submit(_fetch_goalies_safe)
-        odds_events = odds_future.result()
-        games_rows = moneypuck_future.result()
-        goalie_stats = goalie_future.result()
+
+        try:
+            odds_events = odds_future.result(timeout=45)
+        except concurrent.futures.TimeoutError:
+            log.error("Odds API timed out after 45s — returning empty odds")
+            odds_events = []
+        except Exception as exc:  # noqa: BLE001
+            log.error("Odds API call failed: %s", exc)
+            odds_events = []
+
+        try:
+            games_rows = moneypuck_future.result(timeout=45)
+        except concurrent.futures.TimeoutError:
+            log.error("MoneyPuck API timed out after 45s — returning empty games")
+            games_rows = []
+        except Exception as exc:  # noqa: BLE001
+            log.error("MoneyPuck API call failed: %s", exc)
+            games_rows = []
+
+        try:
+            goalie_stats = goalie_future.result(timeout=45)
+        except concurrent.futures.TimeoutError:
+            log.error("Goalie stats fetch timed out after 45s — returning empty goalies")
+            goalie_stats = []
+        except Exception as exc:  # noqa: BLE001
+            log.error("Goalie stats fetch failed: %s", exc)
+            goalie_stats = []
+
+    if not odds_events:
+        log.warning("No odds events received — recommendations will be empty")
 
     log.info(
         "Snapshot data: %d odds events, %d game rows, %d goalies",

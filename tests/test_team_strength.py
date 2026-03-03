@@ -51,7 +51,11 @@ def test_composite_strength_default_weights():
         "pk_xg_against_per_60": 1.0,
     }
     result = composite_strength(metrics)
-    assert abs(result - 1.0) < 0.001  # all z=1 -> composite = 1
+    # Only 7 of 16 default metrics supplied; full-weight normalization
+    # pulls the result toward 0.0 instead of treating partial data as complete.
+    # Available weight = 0.12+0.06+0.10+0.06+0.06+0.03+0.03 = 0.46
+    # Result = 0.46 / 1.00 = 0.46
+    assert abs(result - 0.46) < 0.001
 
 
 def test_composite_strength_mixed():
@@ -63,9 +67,34 @@ def test_composite_strength_mixed():
     }
     weights = {"xg_share": 0.35, "corsi_share": 0.15, "high_danger_share": 0.20}
     result = composite_strength(metrics, weights)
+    # All weight keys are present in metrics, so full_w == available_w.
     # 0.35*2 + 0.15*(-1) + 0.20*0 = 0.55 / 0.70 = 0.7857
     expected = (0.35 * 2.0 + 0.15 * -1.0 + 0.20 * 0.0) / 0.70
     assert abs(result - expected) < 0.001
+
+
+def test_composite_strength_missing_metrics_pulls_toward_zero():
+    """Missing metrics should pull the composite toward 0.0 (league average).
+
+    When only a fraction of the expected metrics are available, the result
+    must be lower than if those same metrics were the only ones defined,
+    because the full weight denominator includes the missing weights.
+    """
+    weights = {"a": 0.5, "b": 0.3, "c": 0.2}
+
+    # All metrics present -> weighted average is exact.
+    all_present = composite_strength({"a": 1.0, "b": 1.0, "c": 1.0}, weights)
+    assert abs(all_present - 1.0) < 0.001
+
+    # Only metric "a" present -> strong z-score is diluted by missing data.
+    sparse = composite_strength({"a": 1.0}, weights)
+    # Expected: 0.5 * 1.0 / 1.0 = 0.5 (pulled toward 0.0)
+    assert abs(sparse - 0.5) < 0.001
+    assert sparse < all_present
+
+    # No metrics present -> result is exactly 0.0 (league average).
+    empty = composite_strength({}, weights)
+    assert empty == 0.0
 
 
 def _make_game_row(home, away, xg=0.5, corsi=0.5, hd_for=5, hd_against=5,

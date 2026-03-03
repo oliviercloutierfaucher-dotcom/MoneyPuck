@@ -455,6 +455,8 @@ class EdgeScoringAgent:
         home_metrics = strength.get(home_team)
         away_metrics = strength.get(away_team)
         if home_metrics is None or away_metrics is None:
+            missing = [t for t, m in [(home_team, home_metrics), (away_team, away_metrics)] if m is None]
+            log.warning("Missing strength data for %s — defaulting to 50/50", missing)
             return 0.5, 0.5, 0.0
 
         home_z = home_metrics.home_strength
