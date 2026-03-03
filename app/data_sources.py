@@ -196,7 +196,7 @@ def fetch_odds(api_key: str, region: str, bookmakers: str | None) -> list[dict[s
     params = {
         "apiKey": api_key,
         "regions": region,
-        "markets": "h2h",
+        "markets": "h2h,spreads,totals",
         "oddsFormat": "american",
     }
     if bookmakers:

@@ -151,6 +151,21 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
             h_edge = (home_prob - h_implied) * 100
             a_edge = (away_prob - a_implied) * 100
 
+            # Spread odds (puck line -1.5 / +1.5)
+            random.seed(hash(home + away + bk_key + "spread"))
+            spread_home = random.choice([+145, +155, +165, +175, +185, +195])
+            spread_away = random.choice([-165, -175, -185, -195, -205, -215])
+            if home_prob < 0.5:
+                spread_home, spread_away = spread_away * -1, spread_home * -1
+
+            # Total odds (over/under)
+            random.seed(hash(home + away + bk_key + "total"))
+            expected_total = 5.5 + (hs + abs(as_)) * 0.3 + random.gauss(0, 0.3)
+            total_line = round(expected_total * 2) / 2  # round to nearest 0.5
+            total_line = max(4.5, min(7.5, total_line))
+            over_odds = random.choice([-115, -110, -105, +100, +105])
+            under_odds = random.choice([-115, -110, -105, +100, +105])
+
             game_books.append({
                 "name": bk_name,
                 "key": bk_key,
@@ -160,9 +175,16 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
                 "away_implied": round(a_implied, 4),
                 "home_edge": round(h_edge, 2),
                 "away_edge": round(a_edge, 2),
+                "home_spread": -1.5,
+                "away_spread": 1.5,
+                "home_spread_odds": spread_home,
+                "away_spread_odds": spread_away,
+                "total_line": total_line,
+                "over_odds": over_odds,
+                "under_odds": under_odds,
             })
 
-            # Check for value bets
+            # Check for value bets (moneyline)
             for side, model_p, impl_p, odds in [
                 (home, home_prob, h_implied, h_odds),
                 (away, away_prob, a_implied, a_odds),
@@ -177,8 +199,10 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
                         "home_team": home,
                         "away_team": away,
                         "side": side,
+                        "market": "ML",
                         "sportsbook": bk_name,
                         "american_odds": odds,
+                        "decimal_odds": round(dec_odds, 2),
                         "implied_probability": round(impl_p, 4),
                         "model_probability": round(model_p, 4),
                         "edge_probability_points": round(edge_pp, 2),
@@ -303,31 +327,56 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             if not display_name and bm_title in book_display_names:
                 display_name = bm_title
             if not display_name:
-                # Accept any book even if not in our preset
                 display_name = bm_title or bm_key
 
-            for market in bm.get("markets", []):
-                if market.get("key") != "h2h":
-                    continue
-                outcomes = {o["name"]: o.get("price", 0) for o in market.get("outcomes", [])}
-                # Odds API uses full team names in outcomes
-                h_odds = outcomes.get(home_raw, 0) or outcomes.get(home, 0)
-                a_odds = outcomes.get(away_raw, 0) or outcomes.get(away, 0)
-                if not h_odds or not a_odds:
-                    continue
+            markets = {m.get("key"): m for m in bm.get("markets", [])}
 
-                h_imp = american_to_implied_probability(h_odds)
-                a_imp = american_to_implied_probability(a_odds)
+            # Moneyline
+            h2h = markets.get("h2h")
+            if not h2h:
+                continue
+            h2h_out = {o["name"]: o.get("price", 0) for o in h2h.get("outcomes", [])}
+            h_odds = h2h_out.get(home_raw, 0) or h2h_out.get(home, 0)
+            a_odds = h2h_out.get(away_raw, 0) or h2h_out.get(away, 0)
+            if not h_odds or not a_odds:
+                continue
+            h_imp = american_to_implied_probability(h_odds)
+            a_imp = american_to_implied_probability(a_odds)
 
-                game_books.append({
-                    "name": display_name,
-                    "home_odds": h_odds,
-                    "away_odds": a_odds,
-                    "home_implied": round(h_imp, 4),
-                    "away_implied": round(a_imp, 4),
-                    "home_edge": round((hp - h_imp) * 100, 2),
-                    "away_edge": round((ap - a_imp) * 100, 2),
-                })
+            book_entry = {
+                "name": display_name,
+                "home_odds": h_odds,
+                "away_odds": a_odds,
+                "home_implied": round(h_imp, 4),
+                "away_implied": round(a_imp, 4),
+                "home_edge": round((hp - h_imp) * 100, 2),
+                "away_edge": round((ap - a_imp) * 100, 2),
+            }
+
+            # Spreads (puck line)
+            spreads = markets.get("spreads")
+            if spreads:
+                for o in spreads.get("outcomes", []):
+                    name = o.get("name", "")
+                    if name == home_raw or name == home:
+                        book_entry["home_spread"] = o.get("point", -1.5)
+                        book_entry["home_spread_odds"] = o.get("price", 0)
+                    elif name == away_raw or name == away:
+                        book_entry["away_spread"] = o.get("point", 1.5)
+                        book_entry["away_spread_odds"] = o.get("price", 0)
+
+            # Totals (over/under)
+            totals = markets.get("totals")
+            if totals:
+                for o in totals.get("outcomes", []):
+                    name = o.get("name", "")
+                    if name == "Over":
+                        book_entry["total_line"] = o.get("point", 5.5)
+                        book_entry["over_odds"] = o.get("price", 0)
+                    elif name == "Under":
+                        book_entry["under_odds"] = o.get("price", 0)
+
+            game_books.append(book_entry)
 
         games.append({
             "home": home,
@@ -392,8 +441,10 @@ def _extract_value_bets_from_games(
                     "home_team": g["home"],
                     "away_team": g["away"],
                     "side": side,
+                    "market": "ML",
                     "sportsbook": b["name"],
                     "american_odds": odds,
+                    "decimal_odds": round(dec_odds, 2),
                     "implied_probability": round(implied, 4),
                     "model_probability": round(model_p, 4),
                     "edge_probability_points": round(edge, 2),
