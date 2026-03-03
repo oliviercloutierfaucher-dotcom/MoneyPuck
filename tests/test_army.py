@@ -7,9 +7,9 @@ def test_army_runs_profiles_from_single_snapshot(monkeypatch):
 
     def fake_snapshot(_config):
         calls["snapshot"] += 1
-        return object()
+        return object(), []
 
-    def fake_score(_snapshot, _config):
+    def fake_score(_snapshot, _config, _games_rows=None):
         calls["score"] += 1
         candidate = ValueCandidate(
             commence_time_utc="2026-01-01T00:00:00Z",

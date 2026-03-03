@@ -22,6 +22,7 @@ def to_serializable(recommendations: list[dict[str, Any]]) -> list[dict[str, Any
                 "edge_probability_points": round(candidate.edge_probability_points, 4),
                 "expected_value_per_dollar": round(candidate.expected_value_per_dollar, 4),
                 "kelly_fraction": round(candidate.kelly_fraction, 4),
+                "confidence": round(candidate.confidence, 4),
                 "recommended_stake": item["recommended_stake"],
                 "stake_fraction": item["stake_fraction"],
             }
@@ -111,7 +112,7 @@ def render_html_preview(recommendations: list[dict[str, Any]]) -> str:
         <thead>
           <tr>
             <th>Commence (UTC)</th><th>Matchup</th><th>Side</th><th>Book</th><th>Odds</th>
-            <th>Implied</th><th>Model</th><th>Edge (pp)</th><th>EV/$</th><th>Kelly</th><th>Stake</th>
+            <th>Implied</th><th>Model</th><th>Edge (pp)</th><th>EV/$</th><th>Kelly</th><th>Conf</th><th>Stake</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -128,7 +129,7 @@ def render_html_preview(recommendations: list[dict[str, Any]]) -> str:
     function renderRows(rows) {{
       const body = document.getElementById('rows');
       if (!rows.length) {{
-        body.innerHTML = `<tr><td colspan="11" class="muted">No opportunities found for current filters.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="12" class="muted">No opportunities found for current filters.</td></tr>`;
       }} else {{
         body.innerHTML = rows.map((r) => `
           <tr>
@@ -142,6 +143,7 @@ def render_html_preview(recommendations: list[dict[str, Any]]) -> str:
             <td class="good">${{n(r.edge_probability_points,2)}}</td>
             <td class="good">${{n(r.expected_value_per_dollar,3)}}</td>
             <td>${{n(r.kelly_fraction,3)}}</td>
+            <td>${{pct(r.confidence || 0)}}</td>
             <td>${{n(r.recommended_stake,2)}}</td>
           </tr>
         `).join('');
