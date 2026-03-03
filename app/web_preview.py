@@ -7,7 +7,7 @@ import random
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .data_sources import get_books_for_region, QUEBEC_BOOKS
+from .data_sources import get_books_for_region, QUEBEC_BOOKS, team_code, TEAM_NAME_TO_CODE
 from .logging_config import get_logger, setup_logging
 from .math_utils import (
     american_to_decimal,
@@ -237,57 +237,82 @@ def _implied_to_american(p: float) -> int:
 
 
 def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
-    """Build dashboard from live API data."""
+    """Build dashboard from live API data.
+
+    Uses live odds from The Odds API. When MoneyPuck data is unavailable
+    (403 in cloud environments), falls back to calibrated demo strength
+    ratings so the model still produces meaningful probabilities.
+    """
     config = _build_config(params)
     region = params.get("region", ["qc"])[0]
     books_map = get_books_for_region(region)
-    book_names = list(books_map.values())
+    book_display_names = set(books_map.values())
 
     snapshot, games_rows = build_market_snapshot(config)
     recommendations = score_snapshot(snapshot, config, games_rows)
     strength = snapshot.team_strength
 
+    # If MoneyPuck failed (0 teams), use demo strength ratings
+    use_demo_strength = len(strength) < 10
+    if use_demo_strength:
+        log.info("Using demo strength ratings (MoneyPuck unavailable)")
+
     # Build per-game data with per-book odds
     games = []
     for event in snapshot.odds_events:
-        home = event.get("home_team", "")
-        away = event.get("away_team", "")
+        home_raw = event.get("home_team", "")
+        away_raw = event.get("away_team", "")
         commence = event.get("commence_time", "")
 
-        home_m = strength.get(home)
-        away_m = strength.get(away)
-        if not home_m or not away_m:
-            continue
+        # Map full names to 3-letter codes
+        home = team_code(home_raw)
+        away = team_code(away_raw)
 
-        hp, ap = logistic_win_probability(
-            home_m.home_strength, away_m.away_strength,
-            home_advantage=config.home_advantage, k=config.logistic_k,
-        )
-        if home_m.starter_save_pct and away_m.starter_save_pct:
-            g_adj = goalie_matchup_adjustment(
-                home_m.starter_save_pct, away_m.starter_save_pct,
-                config.goalie_impact,
-            )
-            hp = max(0.01, min(0.99, hp + g_adj))
-            ap = 1.0 - hp
+        # Get strength — from model or demo fallback
+        if use_demo_strength:
+            hs = DEMO_STRENGTH.get(home, 0)
+            as_ = DEMO_STRENGTH.get(away, 0)
+            diff = hs - as_ + 0.15
+            hp = 1 / (1 + math.exp(-diff))
+            ap = 1 - hp
+        else:
+            home_m = strength.get(home)
+            away_m = strength.get(away)
+            if not home_m or not away_m:
+                hp, ap = 0.5, 0.5
+            else:
+                hp, ap = logistic_win_probability(
+                    home_m.home_strength, away_m.away_strength,
+                    home_advantage=config.home_advantage, k=config.logistic_k,
+                )
+                if home_m.starter_save_pct and away_m.starter_save_pct:
+                    g_adj = goalie_matchup_adjustment(
+                        home_m.starter_save_pct, away_m.starter_save_pct,
+                        config.goalie_impact,
+                    )
+                    hp = max(0.01, min(0.99, hp + g_adj))
+                    ap = 1.0 - hp
 
         game_books = []
         for bm in event.get("bookmakers", []):
             bm_title = bm.get("title", "")
-            # Filter to our region's books
-            if bm_title not in book_names:
-                # Try matching by key
-                bm_key = bm.get("key", "")
-                if bm_key not in books_map:
-                    continue
-                bm_title = books_map[bm_key]
+            bm_key = bm.get("key", "")
+
+            # Match book by key first, then by title
+            display_name = books_map.get(bm_key, "")
+            if not display_name and bm_title in book_display_names:
+                display_name = bm_title
+            if not display_name:
+                # Accept any book even if not in our preset
+                display_name = bm_title or bm_key
 
             for market in bm.get("markets", []):
                 if market.get("key") != "h2h":
                     continue
                 outcomes = {o["name"]: o.get("price", 0) for o in market.get("outcomes", [])}
-                h_odds = outcomes.get(home, 0)
-                a_odds = outcomes.get(away, 0)
+                # Odds API uses full team names in outcomes
+                h_odds = outcomes.get(home_raw, 0) or outcomes.get(home, 0)
+                a_odds = outcomes.get(away_raw, 0) or outcomes.get(away, 0)
                 if not h_odds or not a_odds:
                     continue
 
@@ -295,7 +320,7 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
                 a_imp = american_to_implied_probability(a_odds)
 
                 game_books.append({
-                    "name": bm_title,
+                    "name": display_name,
                     "home_odds": h_odds,
                     "away_odds": a_odds,
                     "home_implied": round(h_imp, 4),
@@ -313,15 +338,21 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             "books": game_books,
         })
 
-    value_bets = to_serializable(recommendations)
+    # Rebuild value bets using demo strength if needed
+    if use_demo_strength and games:
+        value_bets = _extract_value_bets_from_games(games, config)
+    else:
+        value_bets = to_serializable(recommendations)
+
+    all_book_names = sorted({b["name"] for g in games for b in g.get("books", [])})
     total_stake = sum(b["recommended_stake"] for b in value_bets)
     avg_edge = sum(b["edge_probability_points"] for b in value_bets) / len(value_bets) if value_bets else 0
 
     return {
-        "mode": "live",
+        "mode": "live" if not use_demo_strength else "live+demo-strength",
         "games": games,
         "value_bets": value_bets,
-        "books": book_names,
+        "books": all_book_names,
         "summary": {
             "total_bets": len(value_bets),
             "total_stake": round(total_stake, 2),
@@ -334,6 +365,51 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             "min_ev": config.min_ev,
         },
     }
+
+
+def _extract_value_bets_from_games(
+    games: list[dict], config: TrackerConfig,
+) -> list[dict]:
+    """Extract value bets from pre-computed game data with per-book edges."""
+    bets = []
+    for g in games:
+        for b in g.get("books", []):
+            for side, model_p, edge, odds in [
+                (g["home"], g["home_prob"], b["home_edge"], b["home_odds"]),
+                (g["away"], g["away_prob"], b["away_edge"], b["away_odds"]),
+            ]:
+                if edge < config.min_edge:
+                    continue
+                dec_odds = american_to_decimal(odds)
+                implied = american_to_implied_probability(odds)
+                ev = model_p * (dec_odds - 1) - (1 - model_p)
+                if ev < config.min_ev:
+                    continue
+                kelly = max(0, (model_p * dec_odds - 1) / (dec_odds - 1)) * config.kelly_fraction
+                stake = min(config.bankroll * kelly, config.bankroll * config.max_fraction_per_bet)
+                bets.append({
+                    "commence_time_utc": g["commence"],
+                    "home_team": g["home"],
+                    "away_team": g["away"],
+                    "side": side,
+                    "sportsbook": b["name"],
+                    "american_odds": odds,
+                    "implied_probability": round(implied, 4),
+                    "model_probability": round(model_p, 4),
+                    "edge_probability_points": round(edge, 2),
+                    "expected_value_per_dollar": round(ev, 4),
+                    "kelly_fraction": round(kelly, 4),
+                    "confidence": round(min(0.8, 0.5 + edge / 40), 2),
+                    "recommended_stake": round(stake, 2),
+                    "stake_fraction": round(stake / config.bankroll, 4) if config.bankroll else 0,
+                })
+    # Best line per game+side
+    best: dict[str, dict] = {}
+    for bet in bets:
+        key = f"{bet['home_team']}-{bet['away_team']}-{bet['side']}"
+        if key not in best or bet["expected_value_per_dollar"] > best[key]["expected_value_per_dollar"]:
+            best[key] = bet
+    return sorted(best.values(), key=lambda x: x["expected_value_per_dollar"], reverse=True)
 
 
 class PreviewHandler(BaseHTTPRequestHandler):

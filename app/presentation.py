@@ -594,7 +594,7 @@ function renderGameCard(g, bets) {{
   const hasValue = bets.some(b => (b.home_team === g.home && b.away_team === g.away) || (b.home_team === g.away && b.away_team === g.home));
   const hp = (g.home_prob * 100).toFixed(1);
   const ap = (g.away_prob * 100).toFixed(1);
-  const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit'}}) : '';
+  const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit', timeZone:'America/New_York'}}) + ' ET' : '';
 
   let booksHtml = '';
   if (g.books && g.books.length) {{
