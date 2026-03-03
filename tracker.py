@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date
 
 from app.army import run_agent_army
 from app.logging_config import get_logger, setup_logging
@@ -35,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     parser.add_argument("--persist", action="store_true", help="Save predictions to SQLite database")
     parser.add_argument("--validate", action="store_true", help="Print model health report from stored predictions")
+    parser.add_argument("--tonight", action="store_true", help="Show tonight's games with model probabilities and value bets")
     # Tunable model parameters
     parser.add_argument("--half-life", type=float, default=30.0, help="Decay half-life in days for game weighting")
     parser.add_argument("--regression-k", type=int, default=20, help="Bayesian regression-to-mean sample size")
@@ -65,20 +67,93 @@ def _validate_args(args: argparse.Namespace) -> str | None:
     return None
 
 
-def _print_human(recommendations: list[dict[str, object]]) -> None:
+def _print_human(recommendations: list[dict[str, object]], config: TrackerConfig | None = None) -> None:
     if not recommendations:
         print("No value bets found with current thresholds.")
         return
 
-    print(f"Found {len(recommendations)} opportunities\n")
+    print(f"\nFound {len(recommendations)} value bet(s)")
+    bankroll = config.bankroll if config else 1000.0
+    print(f"Bankroll: ${bankroll:,.0f}\n")
+    print(f"{'Game':<22} {'Pick':<6} {'Book':<12} {'Odds':>6} "
+          f"{'Market':>7} {'Model':>7} {'Edge':>7} {'EV/$':>6} {'Stake':>8} {'Conf':>5}")
+    print("-" * 100)
+    total_stake = 0.0
     for item in recommendations:
         c = item["candidate"]
+        game = f"{c.away_team} @ {c.home_team}"
+        total_stake += item["recommended_stake"]
         print(
-            f"[{c.commence_time_utc}] {c.away_team} @ {c.home_team} | "
-            f"Bet {c.side} ({c.american_odds:+}) at {c.sportsbook} | "
-            f"Edge {c.edge_probability_points:.2f}pp | EV/$ {c.expected_value_per_dollar:.3f} | "
-            f"Stake ${item['recommended_stake']} ({item['stake_fraction'] * 100:.2f}% BR)"
+            f"{game:<22} {c.side:<6} {c.sportsbook:<12} "
+            f"{c.american_odds:>+6} "
+            f"{c.implied_probability:>6.1%} {c.model_probability:>6.1%} "
+            f"{c.edge_probability_points:>+6.1f}pp "
+            f"{c.expected_value_per_dollar:>5.3f} ${item['recommended_stake']:>7.2f} "
+            f"{c.confidence:>4.0%}"
         )
+    print()
+    print(f"Total stake: ${total_stake:,.2f} ({total_stake/bankroll:.1%} of bankroll)")
+
+
+def _print_tonight(recommendations: list[dict[str, object]], snapshot, config: TrackerConfig) -> None:
+    """Rich output for --tonight mode with game matchups + value bets."""
+    from app.math_utils import logistic_win_probability, goalie_matchup_adjustment
+
+    today_str = date.today().isoformat()
+    strength = snapshot.team_strength
+
+    print(f"\n{'=' * 72}")
+    print(f"  TONIGHT'S GAMES — {today_str}")
+    print(f"{'=' * 72}")
+
+    # Show all games with model probabilities
+    today_events = [
+        e for e in snapshot.odds_events
+        if e.get("commence_time", "")[:10] == today_str
+    ]
+    if not today_events:
+        today_events = snapshot.odds_events  # show all if date filter yields nothing
+
+    if today_events:
+        print(f"\n  {'Game':<20} {'Home Win':>9} {'Away Win':>9} {'Spread':<12} {'Call'}")
+        print("  " + "-" * 65)
+        for event in today_events:
+            home = event.get("home_team", "")
+            away = event.get("away_team", "")
+            home_m = strength.get(home)
+            away_m = strength.get(away)
+            if home_m and away_m:
+                hp, ap = logistic_win_probability(
+                    home_m.home_strength, away_m.away_strength,
+                    home_advantage=config.home_advantage, k=config.logistic_k,
+                )
+                if home_m.starter_save_pct and away_m.starter_save_pct:
+                    g_adj = goalie_matchup_adjustment(
+                        home_m.starter_save_pct, away_m.starter_save_pct,
+                        config.goalie_impact,
+                    )
+                    hp = max(0.01, min(0.99, hp + g_adj))
+                    ap = 1.0 - hp
+                diff = abs(hp - ap) * 100
+                fav = home if hp > ap else away
+                call = "STRONG" if diff > 15 else ("LEAN" if diff > 8 else "TOSS-UP")
+                matchup = f"{away} @ {home}"
+                print(f"  {matchup:<20} {hp:>8.1%} {ap:>9.1%} {fav} by {diff:.0f}pp  {call}")
+    else:
+        print("\n  No games found for today")
+
+    # Value bets section
+    print(f"\n{'=' * 72}")
+    if recommendations:
+        print(f"  VALUE BETS ({len(recommendations)})")
+        print(f"{'=' * 72}\n")
+        _print_human(recommendations, config)
+    else:
+        print(f"  NO VALUE BETS at current thresholds")
+        print(f"  (min_edge={config.min_edge}pp, min_ev={config.min_ev})")
+        print(f"{'=' * 72}")
+
+    print()
 
 
 def main() -> int:
@@ -139,6 +214,73 @@ def main() -> int:
             print(json.dumps(army_results, indent=2))
             return 0
 
+        if args.tonight:
+            from app.service import build_market_snapshot, score_snapshot
+            snapshot, games_rows = build_market_snapshot(config)
+            recommendations = score_snapshot(snapshot, config, games_rows)
+
+            if config.persist and recommendations:
+                from app.service import _persist_recommendations
+                _persist_recommendations(recommendations, config)
+
+            if args.json:
+                output = {
+                    "date": date.today().isoformat(),
+                    "model": "moneypuck-edge-v2",
+                    "config": {
+                        "bankroll": config.bankroll,
+                        "min_edge": config.min_edge,
+                        "min_ev": config.min_ev,
+                        "kelly_fraction": config.kelly_fraction,
+                        "region": config.region,
+                    },
+                    "games": [],
+                    "bets": to_serializable(recommendations),
+                    "summary": {
+                        "total_bets": len(recommendations),
+                        "total_stake": sum(float(r["recommended_stake"]) for r in recommendations),
+                        "avg_edge": (
+                            sum(r["candidate"].edge_probability_points for r in recommendations) / len(recommendations)
+                            if recommendations else 0.0
+                        ),
+                        "avg_ev": (
+                            sum(r["candidate"].expected_value_per_dollar for r in recommendations) / len(recommendations)
+                            if recommendations else 0.0
+                        ),
+                    },
+                }
+                # Add game-level model probabilities
+                from app.math_utils import logistic_win_probability, goalie_matchup_adjustment
+                for event in snapshot.odds_events:
+                    home = event.get("home_team", "")
+                    away = event.get("away_team", "")
+                    hm = snapshot.team_strength.get(home)
+                    am = snapshot.team_strength.get(away)
+                    if hm and am:
+                        hp, ap = logistic_win_probability(
+                            hm.home_strength, am.away_strength,
+                            home_advantage=config.home_advantage, k=config.logistic_k,
+                        )
+                        if hm.starter_save_pct and am.starter_save_pct:
+                            g_adj = goalie_matchup_adjustment(
+                                hm.starter_save_pct, am.starter_save_pct,
+                                config.goalie_impact,
+                            )
+                            hp = max(0.01, min(0.99, hp + g_adj))
+                            ap = 1.0 - hp
+                        output["games"].append({
+                            "home": home,
+                            "away": away,
+                            "home_win_pct": round(hp, 4),
+                            "away_win_pct": round(ap, 4),
+                            "favourite": home if hp > ap else away,
+                            "commence": event.get("commence_time", ""),
+                        })
+                print(json.dumps(output, indent=2))
+            else:
+                _print_tonight(recommendations, snapshot, config)
+            return 0
+
         recommendations = run_tracker(config)
     except ValueError as exc:
         log.error("Configuration error: %s", exc)
@@ -156,7 +298,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(to_serializable(recommendations), indent=2))
     else:
-        _print_human(recommendations)
+        _print_human(recommendations, config)
 
     return 0
 

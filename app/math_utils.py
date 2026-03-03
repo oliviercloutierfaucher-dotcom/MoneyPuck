@@ -160,9 +160,34 @@ def logistic_win_probability(
 def prediction_confidence(
     games_a: int, games_b: int, min_games: int = 15
 ) -> float:
-    """0-1 confidence score based on sample sizes of both teams."""
+    """0-1 confidence score based on sample sizes of both teams.
+
+    The score ramps from 0 to 1 as both teams accumulate games.
+    At *min_games* per team the confidence is 50%; at 2× *min_games*
+    it reaches 67%.
+    """
     avg = (games_a + games_b) / 2.0
     return min(1.0, avg / (avg + min_games))
+
+
+def edge_adjusted_confidence(
+    base_confidence: float,
+    edge_pp: float,
+    max_edge_penalty: float = 0.15,
+    edge_threshold: float = 8.0,
+) -> float:
+    """Reduce confidence when the claimed edge is suspiciously large.
+
+    Very large edges (>8pp) often indicate stale lines or model noise
+    rather than genuine mispricing.  This applies a graduated penalty:
+    an edge of 8pp gets no penalty, 16pp loses ~7.5% confidence, etc.
+
+    Returns adjusted confidence clamped to [0, 1].
+    """
+    excess = max(0.0, abs(edge_pp) - edge_threshold)
+    # Penalty scales linearly: every 8pp above threshold costs max_edge_penalty
+    penalty = min(max_edge_penalty, excess / edge_threshold * max_edge_penalty)
+    return max(0.0, min(1.0, base_confidence - penalty))
 
 
 # ---------------------------------------------------------------------------

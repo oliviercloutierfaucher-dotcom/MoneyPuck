@@ -26,45 +26,47 @@ log = get_logger("preview")
 # ---------------------------------------------------------------------------
 
 def _build_demo_game_rows() -> list[dict[str, str]]:
-    """Generate realistic game rows using legacy bulk CSV format.
+    """Generate realistic game rows using MoneyPuck team GBG format.
 
+    Uses all 16 metric columns so every metric lights up in the model.
     Stats are calibrated to approximate real 2024-25 NHL team performance.
     """
     random.seed(42)
+    # team: (xg%, corsi%, hd_for, hd_against, gf, ga, sf, sa, fenwick%,
+    #        fo%, takeaway_ratio, rebound_ctrl, dz_ga, sv%)
     teams_data = {
-        # team: (xg_pct, corsi_pct, hd_for, hd_against, gf, ga, sf, sa, fenwick)
-        "FLA": (0.560, 0.535, 12, 8,  3.5, 2.4, 33, 27, 0.540),
-        "EDM": (0.555, 0.540, 13, 9,  3.8, 2.8, 35, 28, 0.545),
-        "WPG": (0.545, 0.525, 11, 8,  3.3, 2.5, 32, 28, 0.530),
-        "DAL": (0.540, 0.530, 11, 9,  3.2, 2.6, 31, 27, 0.535),
-        "COL": (0.548, 0.520, 12, 9,  3.6, 2.9, 34, 30, 0.525),
-        "CAR": (0.535, 0.545, 10, 8,  3.1, 2.5, 32, 26, 0.548),
-        "TOR": (0.530, 0.515, 11, 9,  3.3, 2.8, 33, 29, 0.520),
-        "VGK": (0.528, 0.510, 10, 9,  3.2, 2.7, 31, 28, 0.515),
-        "NYR": (0.525, 0.530, 10, 9,  3.0, 2.6, 30, 27, 0.528),
-        "TBL": (0.520, 0.505, 11, 10, 3.4, 3.0, 33, 30, 0.508),
-        "BOS": (0.518, 0.520, 10, 9,  2.9, 2.6, 30, 28, 0.522),
-        "MIN": (0.515, 0.510, 10, 9,  2.8, 2.5, 29, 27, 0.512),
-        "NJD": (0.512, 0.505, 10, 9,  3.0, 2.8, 31, 29, 0.508),
-        "VAN": (0.510, 0.500, 10, 9,  3.1, 2.9, 32, 30, 0.505),
-        "LAK": (0.508, 0.508, 9, 9,   2.8, 2.7, 29, 28, 0.510),
-        "WSH": (0.505, 0.495, 10, 10, 3.2, 3.0, 31, 30, 0.498),
-        "OTT": (0.502, 0.498, 10, 10, 3.0, 2.9, 30, 29, 0.500),
-        "CGY": (0.498, 0.505, 9, 10,  2.7, 2.8, 28, 29, 0.502),
-        "STL": (0.495, 0.490, 9, 10,  2.8, 3.0, 29, 30, 0.492),
-        "DET": (0.492, 0.488, 9, 10,  2.7, 2.9, 28, 30, 0.490),
-        "SEA": (0.490, 0.485, 9, 10,  2.6, 2.8, 28, 30, 0.488),
-        "NYI": (0.488, 0.498, 9, 10,  2.5, 2.7, 27, 29, 0.496),
-        "PIT": (0.485, 0.480, 9, 10,  2.8, 3.1, 30, 32, 0.482),
-        "PHI": (0.482, 0.478, 9, 11,  2.6, 3.0, 28, 31, 0.480),
-        "BUF": (0.478, 0.475, 8, 10,  2.5, 3.0, 27, 31, 0.478),
-        "MTL": (0.475, 0.470, 8, 11,  2.4, 3.1, 27, 32, 0.472),
-        "ANA": (0.472, 0.465, 8, 11,  2.3, 3.0, 26, 31, 0.468),
-        "CBJ": (0.468, 0.460, 8, 11,  2.4, 3.2, 27, 33, 0.462),
-        "UTA": (0.465, 0.458, 8, 11,  2.3, 3.1, 26, 32, 0.460),
-        "NSH": (0.462, 0.470, 8, 11,  2.2, 3.0, 26, 31, 0.468),
-        "SJS": (0.440, 0.445, 7, 12,  2.0, 3.5, 24, 34, 0.448),
-        "CHI": (0.435, 0.440, 7, 12,  1.9, 3.4, 24, 35, 0.442),
+        "FLA": (0.560, 0.535, 12, 8,  3.5, 2.4, 33, 27, 0.540, 0.520, 0.55, 0.56, 3.2, 0.920),
+        "EDM": (0.555, 0.540, 13, 9,  3.8, 2.8, 35, 28, 0.545, 0.505, 0.52, 0.54, 4.1, 0.912),
+        "WPG": (0.545, 0.525, 11, 8,  3.3, 2.5, 32, 28, 0.530, 0.510, 0.53, 0.52, 3.8, 0.916),
+        "DAL": (0.540, 0.530, 11, 9,  3.2, 2.6, 31, 27, 0.535, 0.515, 0.54, 0.53, 3.5, 0.914),
+        "COL": (0.548, 0.520, 12, 9,  3.6, 2.9, 34, 30, 0.525, 0.490, 0.50, 0.55, 4.3, 0.908),
+        "CAR": (0.535, 0.545, 10, 8,  3.1, 2.5, 32, 26, 0.548, 0.525, 0.56, 0.51, 3.0, 0.918),
+        "TOR": (0.530, 0.515, 11, 9,  3.3, 2.8, 33, 29, 0.520, 0.500, 0.51, 0.52, 3.9, 0.910),
+        "VGK": (0.528, 0.510, 10, 9,  3.2, 2.7, 31, 28, 0.515, 0.508, 0.52, 0.50, 3.7, 0.912),
+        "NYR": (0.525, 0.530, 10, 9,  3.0, 2.6, 30, 27, 0.528, 0.495, 0.51, 0.53, 3.4, 0.922),
+        "TBL": (0.520, 0.505, 11, 10, 3.4, 3.0, 33, 30, 0.508, 0.500, 0.49, 0.51, 4.0, 0.906),
+        "BOS": (0.518, 0.520, 10, 9,  2.9, 2.6, 30, 28, 0.522, 0.520, 0.53, 0.50, 3.3, 0.915),
+        "MIN": (0.515, 0.510, 10, 9,  2.8, 2.5, 29, 27, 0.512, 0.515, 0.54, 0.49, 3.1, 0.920),
+        "NJD": (0.512, 0.505, 10, 9,  3.0, 2.8, 31, 29, 0.508, 0.498, 0.50, 0.51, 3.8, 0.910),
+        "VAN": (0.510, 0.500, 10, 9,  3.1, 2.9, 32, 30, 0.505, 0.492, 0.49, 0.50, 4.2, 0.908),
+        "LAK": (0.508, 0.508, 9, 9,   2.8, 2.7, 29, 28, 0.510, 0.505, 0.51, 0.49, 3.6, 0.912),
+        "WSH": (0.505, 0.495, 10, 10, 3.2, 3.0, 31, 30, 0.498, 0.500, 0.48, 0.50, 4.0, 0.905),
+        "OTT": (0.502, 0.498, 10, 10, 3.0, 2.9, 30, 29, 0.500, 0.495, 0.49, 0.48, 4.1, 0.907),
+        "CGY": (0.498, 0.505, 9, 10,  2.7, 2.8, 28, 29, 0.502, 0.510, 0.52, 0.48, 3.5, 0.910),
+        "STL": (0.495, 0.490, 9, 10,  2.8, 3.0, 29, 30, 0.492, 0.498, 0.48, 0.47, 4.3, 0.903),
+        "DET": (0.492, 0.488, 9, 10,  2.7, 2.9, 28, 30, 0.490, 0.490, 0.47, 0.48, 4.5, 0.902),
+        "SEA": (0.490, 0.485, 9, 10,  2.6, 2.8, 28, 30, 0.488, 0.495, 0.48, 0.47, 4.2, 0.906),
+        "NYI": (0.488, 0.498, 9, 10,  2.5, 2.7, 27, 29, 0.496, 0.510, 0.50, 0.46, 3.8, 0.908),
+        "PIT": (0.485, 0.480, 9, 10,  2.8, 3.1, 30, 32, 0.482, 0.488, 0.46, 0.49, 4.4, 0.900),
+        "PHI": (0.482, 0.478, 9, 11,  2.6, 3.0, 28, 31, 0.480, 0.492, 0.47, 0.46, 4.6, 0.902),
+        "BUF": (0.478, 0.475, 8, 10,  2.5, 3.0, 27, 31, 0.478, 0.485, 0.46, 0.47, 4.7, 0.899),
+        "MTL": (0.475, 0.470, 8, 11,  2.4, 3.1, 27, 32, 0.472, 0.488, 0.45, 0.45, 4.8, 0.898),
+        "ANA": (0.472, 0.465, 8, 11,  2.3, 3.0, 26, 31, 0.468, 0.480, 0.44, 0.46, 4.5, 0.901),
+        "CBJ": (0.468, 0.460, 8, 11,  2.4, 3.2, 27, 33, 0.462, 0.482, 0.43, 0.44, 5.0, 0.897),
+        "UTA": (0.465, 0.458, 8, 11,  2.3, 3.1, 26, 32, 0.460, 0.478, 0.44, 0.45, 5.1, 0.896),
+        "NSH": (0.462, 0.470, 8, 11,  2.2, 3.0, 26, 31, 0.468, 0.500, 0.47, 0.44, 4.3, 0.904),
+        "SJS": (0.440, 0.445, 7, 12,  2.0, 3.5, 24, 34, 0.448, 0.470, 0.42, 0.42, 5.5, 0.892),
+        "CHI": (0.435, 0.440, 7, 12,  1.9, 3.4, 24, 35, 0.442, 0.465, 0.41, 0.43, 5.3, 0.890),
     }
 
     rows: list[dict[str, str]] = []
@@ -76,26 +78,106 @@ def _build_demo_game_rows() -> list[dict[str, str]]:
         random.shuffle(team_list)
         pairs = [(team_list[i], team_list[i+1]) for i in range(0, len(team_list) - 1, 2)]
         for home, away in pairs:
-            hd = teams_data[home]
-            ad = teams_data[away]
-
+            d = teams_data[home]
             noise = lambda: random.gauss(0, 0.02)
+            noise_small = lambda: random.gauss(0, 0.01)
+
+            # Derived xG values for score-adj and flurry-adj
+            xg_for = round(d[4] * 0.9 + random.gauss(0, 0.3), 2)
+            xg_against = round(d[5] * 0.9 + random.gauss(0, 0.3), 2)
+            score_adj_xg_for = round(xg_for * (1 + noise_small()), 2)
+            score_adj_xg_against = round(xg_against * (1 + noise_small()), 2)
+            flurry_adj_xg_for = round(xg_for * (0.95 + noise_small()), 2)
+            flurry_adj_xg_against = round(xg_against * (0.95 + noise_small()), 2)
+            hd_for = round(d[2] + random.gauss(0, 1))
+            hd_against = round(d[3] + random.gauss(0, 1))
+            hd_xg_for = round(hd_for * 0.12 + random.gauss(0, 0.05), 3)
+            hd_xg_against = round(hd_against * 0.12 + random.gauss(0, 0.05), 3)
+            md_xg_for = round(max(0, xg_for - hd_xg_for) * 0.6, 3)
+            md_xg_against = round(max(0, xg_against - hd_xg_against) * 0.6, 3)
+            rebound_xg_for = round(hd_xg_for * d[11] + noise_small(), 3)
+            rebound_xg_against = round(hd_xg_against * (1 - d[11]) + noise_small(), 3)
+            fo_total = round(55 + random.gauss(0, 5))
+            fo_won = round(fo_total * (d[9] + noise_small()))
+            ta_for = round(8 * d[10] + random.gauss(0, 1))
+            ga_for = round(8 * (1 - d[10]) + random.gauss(0, 1))
+            dz_ga = round(d[12] + random.gauss(0, 0.8), 1)
+
+            # Use team GBG format so _extract_team_gbg() picks it up
             rows.append({
-                "homeTeamCode": home,
-                "awayTeamCode": away,
+                "playerTeam": home,
+                "home_or_away": "HOME",
+                "situation": "all",
                 "gameDate": date,
                 "season": "2024",
-                "xGoalsPercentage": str(round(hd[0] + noise(), 4)),
-                "corsiPercentage": str(round(hd[1] + noise(), 4)),
-                "fenwickPercentage": str(round(hd[8] + noise(), 4)),
-                "highDangerShotsFor": str(round(hd[2] + random.gauss(0, 1))),
-                "highDangerShotsAgainst": str(round(hd[3] + random.gauss(0, 1))),
-                "goalsFor": str(round(hd[4] + random.gauss(0, 0.8))),
-                "goalsAgainst": str(round(hd[5] + random.gauss(0, 0.8))),
-                "shotsOnGoalFor": str(round(hd[6] + random.gauss(0, 2))),
-                "shotsOnGoalAgainst": str(round(hd[7] + random.gauss(0, 2))),
-                "xGoalsFor": str(round(hd[4] * 0.9 + random.gauss(0, 0.3), 2)),
-                "xGoalsAgainst": str(round(hd[5] * 0.9 + random.gauss(0, 0.3), 2)),
+                "xGoalsPercentage": str(round(d[0] + noise(), 4)),
+                "corsiPercentage": str(round(d[1] + noise(), 4)),
+                "fenwickPercentage": str(round(d[8] + noise(), 4)),
+                "highDangerShotsFor": str(max(0, hd_for)),
+                "highDangerShotsAgainst": str(max(0, hd_against)),
+                "goalsFor": str(round(d[4] + random.gauss(0, 0.8))),
+                "goalsAgainst": str(round(d[5] + random.gauss(0, 0.8))),
+                "shotsOnGoalFor": str(round(d[6] + random.gauss(0, 2))),
+                "shotsOnGoalAgainst": str(round(d[7] + random.gauss(0, 2))),
+                "xGoalsFor": str(xg_for),
+                "xGoalsAgainst": str(xg_against),
+                "scoreVenueAdjustedxGoalsFor": str(score_adj_xg_for),
+                "scoreVenueAdjustedxGoalsAgainst": str(score_adj_xg_against),
+                "flurryAdjustedxGoalsFor": str(flurry_adj_xg_for),
+                "flurryAdjustedxGoalsAgainst": str(flurry_adj_xg_against),
+                "highDangerxGoalsFor": str(max(0, hd_xg_for)),
+                "highDangerxGoalsAgainst": str(max(0, hd_xg_against)),
+                "mediumDangerxGoalsFor": str(max(0, md_xg_for)),
+                "mediumDangerxGoalsAgainst": str(max(0, md_xg_against)),
+                "reboundxGoalsFor": str(max(0, rebound_xg_for)),
+                "reboundxGoalsAgainst": str(max(0, rebound_xg_against)),
+                "faceOffsWonFor": str(max(0, fo_won)),
+                "faceOffsWonAgainst": str(max(0, fo_total - fo_won)),
+                "takeawaysFor": str(max(0, ta_for)),
+                "giveawaysFor": str(max(0, ga_for)),
+                "dZoneGiveawaysFor": str(max(0, dz_ga)),
+                "penaltiesFor": str(round(3 + random.gauss(0, 0.5))),
+                "penaltiesAgainst": str(round(3 + random.gauss(0, 0.5))),
+            })
+
+            # Away team row
+            ad = teams_data[away]
+            a_xg_for = round(ad[4] * 0.9 + random.gauss(0, 0.3), 2)
+            a_xg_against = round(ad[5] * 0.9 + random.gauss(0, 0.3), 2)
+            a_hd_for = round(ad[2] + random.gauss(0, 1))
+            a_hd_against = round(ad[3] + random.gauss(0, 1))
+            rows.append({
+                "playerTeam": away,
+                "home_or_away": "AWAY",
+                "situation": "all",
+                "gameDate": date,
+                "season": "2024",
+                "xGoalsPercentage": str(round(ad[0] + noise(), 4)),
+                "corsiPercentage": str(round(ad[1] + noise(), 4)),
+                "fenwickPercentage": str(round(ad[8] + noise(), 4)),
+                "highDangerShotsFor": str(max(0, a_hd_for)),
+                "highDangerShotsAgainst": str(max(0, a_hd_against)),
+                "goalsFor": str(round(ad[4] + random.gauss(0, 0.8))),
+                "goalsAgainst": str(round(ad[5] + random.gauss(0, 0.8))),
+                "shotsOnGoalFor": str(round(ad[6] + random.gauss(0, 2))),
+                "shotsOnGoalAgainst": str(round(ad[7] + random.gauss(0, 2))),
+                "xGoalsFor": str(a_xg_for),
+                "xGoalsAgainst": str(a_xg_against),
+                "scoreVenueAdjustedxGoalsFor": str(round(a_xg_for * (1 + noise_small()), 2)),
+                "scoreVenueAdjustedxGoalsAgainst": str(round(a_xg_against * (1 + noise_small()), 2)),
+                "flurryAdjustedxGoalsFor": str(round(a_xg_for * (0.95 + noise_small()), 2)),
+                "flurryAdjustedxGoalsAgainst": str(round(a_xg_against * (0.95 + noise_small()), 2)),
+                "highDangerxGoalsFor": str(max(0, round(a_hd_for * 0.12 + random.gauss(0, 0.05), 3))),
+                "highDangerxGoalsAgainst": str(max(0, round(a_hd_against * 0.12 + random.gauss(0, 0.05), 3))),
+                "mediumDangerxGoalsFor": str(max(0, round(a_xg_for * 0.35, 3))),
+                "mediumDangerxGoalsAgainst": str(max(0, round(a_xg_against * 0.35, 3))),
+                "reboundxGoalsFor": str(round(max(0, a_hd_for * 0.12 * ad[11]), 3)),
+                "reboundxGoalsAgainst": str(round(max(0, a_hd_against * 0.12 * (1 - ad[11])), 3)),
+                "faceOffsWonFor": str(round(55 * ad[9])),
+                "faceOffsWonAgainst": str(round(55 * (1 - ad[9]))),
+                "takeawaysFor": str(round(8 * ad[10])),
+                "giveawaysFor": str(round(8 * (1 - ad[10]))),
+                "dZoneGiveawaysFor": str(round(ad[12] + random.gauss(0, 0.5), 1)),
                 "penaltiesFor": str(round(3 + random.gauss(0, 0.5))),
                 "penaltiesAgainst": str(round(3 + random.gauss(0, 0.5))),
             })

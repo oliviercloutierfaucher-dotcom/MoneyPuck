@@ -15,6 +15,7 @@ from .math_utils import (
     composite_strength,
     confidence_adjusted_kelly,
     days_between,
+    edge_adjusted_confidence,
     expected_value_per_dollar,
     exponential_decay_weight,
     goalie_matchup_adjustment,
@@ -227,7 +228,7 @@ class TeamStrengthAgent:
             team = row.get("playerTeam", row.get("team", ""))
             if not team:
                 continue
-            venue = row.get("home_or_away", "home")
+            venue = row.get("home_or_away", "home").lower()
             game_date = row.get("gameDate", today)[:10]
             try:
                 days_ago = days_between(game_date, today)
@@ -537,6 +538,8 @@ class EdgeScoringAgent:
                         kelly = kelly_fraction(model_p, decimal_odds)
 
                         if edge_pp >= config.min_edge and ev >= config.min_ev:
+                            # Penalize suspiciously large edges
+                            adj_conf = edge_adjusted_confidence(conf, edge_pp)
                             candidates.append(
                                 ValueCandidate(
                                     commence_time_utc=commence,
@@ -551,7 +554,7 @@ class EdgeScoringAgent:
                                     edge_probability_points=edge_pp,
                                     expected_value_per_dollar=ev,
                                     kelly_fraction=kelly,
-                                    confidence=conf,
+                                    confidence=adj_conf,
                                 )
                             )
 
