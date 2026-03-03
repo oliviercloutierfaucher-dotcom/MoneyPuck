@@ -20,6 +20,8 @@ class TeamMetrics:
     away_strength: float = 0.0
     games_played: int = 0
     composite: float = 0.0
+    starter_save_pct: float = 0.0
+    starter_gaa: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,12 @@ class TrackerConfig:
     kelly_fraction: float = 0.5
     max_nightly_exposure: float = 0.15
     persist: bool = False
+    # Tunable model parameters
+    half_life: float = 30.0
+    regression_k: int = 20
+    home_advantage: float = 0.15
+    logistic_k: float = 1.0
+    goalie_impact: float = 1.5
 
 
 @dataclass(frozen=True)
@@ -60,3 +68,4 @@ class MarketSnapshot:
 
     odds_events: list[dict[str, Any]] = field(default_factory=list)
     team_strength: dict[str, TeamMetrics] = field(default_factory=dict)
+    goalie_stats: list[dict[str, Any]] = field(default_factory=list)

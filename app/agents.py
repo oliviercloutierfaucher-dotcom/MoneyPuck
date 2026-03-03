@@ -16,12 +16,14 @@ from .math_utils import (
     days_between,
     expected_value_per_dollar,
     exponential_decay_weight,
+    goalie_matchup_adjustment,
     kelly_fraction,
     logistic_win_probability,
     prediction_confidence,
     regress_to_mean,
 )
 from .models import TeamMetrics, TrackerConfig, ValueCandidate
+from .nhl_api import fetch_goalie_stats, infer_likely_starter
 from .situational import situational_adjustments
 
 
@@ -53,7 +55,17 @@ class TeamStrengthAgent:
     HALF_LIFE = 30.0   # days
     REGRESSION_K = 20  # games to weight 50/50 with prior
 
-    def run(self, games_rows: list[dict[str, str]]) -> dict[str, TeamMetrics]:
+    def run(
+        self,
+        games_rows: list[dict[str, str]],
+        config: TrackerConfig | None = None,
+        goalie_stats: list[dict[str, Any]] | None = None,
+    ) -> dict[str, TeamMetrics]:
+        # Read tunable params from config (fall back to class defaults)
+        half_life = config.half_life if config else self.HALF_LIFE
+        regression_k = config.regression_k if config else self.REGRESSION_K
+        goalie_impact = config.goalie_impact if config else 1.5
+
         today = date.today().isoformat()
 
         # ---- 1. Accumulate per-team, per-venue raw metric lists ----
@@ -67,7 +79,7 @@ class TeamStrengthAgent:
                 days_ago = days_between(game_date, today)
             except ValueError:
                 days_ago = 0
-            weight = exponential_decay_weight(days_ago, self.HALF_LIFE)
+            weight = exponential_decay_weight(days_ago, half_life)
 
             xg_pct = safe_float(row, "xGoalsPercentage", 0.5)
             corsi_pct = safe_float(row, "corsiPercentage", 0.5)
@@ -175,25 +187,38 @@ class TeamStrengthAgent:
         z_away = self._z_score_all(team_away_raw, teams, METRIC_KEYS)
 
         # ---- 4. Regression to mean & composite ----
+        # Build goalie lookup: team_code -> starter dict
+        goalie_lookup: dict[str, dict[str, Any]] = {}
+        if goalie_stats:
+            for team in teams:
+                starter = infer_likely_starter(team, goalie_stats)
+                if starter:
+                    goalie_lookup[team] = starter
+
         result: dict[str, TeamMetrics] = {}
         for team in teams:
             n = team_game_counts.get(team, 0)
             regressed = {
-                key: regress_to_mean(z_overall[team][key], n, self.REGRESSION_K, prior=0.0)
+                key: regress_to_mean(z_overall[team][key], n, regression_k, prior=0.0)
                 for key in METRIC_KEYS
             }
             home_regressed = {
-                key: regress_to_mean(z_home[team][key], n, self.REGRESSION_K, prior=0.0)
+                key: regress_to_mean(z_home[team][key], n, regression_k, prior=0.0)
                 for key in METRIC_KEYS
             }
             away_regressed = {
-                key: regress_to_mean(z_away[team][key], n, self.REGRESSION_K, prior=0.0)
+                key: regress_to_mean(z_away[team][key], n, regression_k, prior=0.0)
                 for key in METRIC_KEYS
             }
 
             comp = composite_strength(regressed)
             home_comp = composite_strength(home_regressed)
             away_comp = composite_strength(away_regressed)
+
+            # Goalie enrichment
+            starter = goalie_lookup.get(team)
+            s_save_pct = starter["save_pct"] if starter else 0.0
+            s_gaa = starter["gaa"] if starter else 0.0
 
             raw = team_raw[team]
             result[team] = TeamMetrics(
@@ -209,6 +234,8 @@ class TeamStrengthAgent:
                 away_strength=away_comp,
                 games_played=n,
                 composite=comp,
+                starter_save_pct=s_save_pct,
+                starter_gaa=s_gaa,
             )
 
         return result
@@ -249,11 +276,15 @@ class EdgeScoringAgent:
         away_team: str,
         strength: dict[str, TeamMetrics],
         sit_adj: float = 0.0,
+        goalie_adj: float = 0.0,
+        home_advantage: float = 0.15,
+        logistic_k: float = 1.0,
     ) -> tuple[float, float, float]:
         """Returns (home_prob, away_prob, confidence).
 
-        *sit_adj* is a situational probability adjustment applied to the
-        home win probability (from Phase 5 situational factors).
+        *sit_adj* is a situational probability adjustment (rest, travel).
+        *goalie_adj* is a goalie matchup adjustment (save% differential).
+        Both are applied as probability deltas from the home team's perspective.
         """
         home_metrics = strength.get(home_team)
         away_metrics = strength.get(away_team)
@@ -263,9 +294,12 @@ class EdgeScoringAgent:
         home_z = home_metrics.home_strength
         away_z = away_metrics.away_strength
 
-        home_prob, away_prob = logistic_win_probability(home_z, away_z)
-        # Apply situational adjustment (rest, travel, etc.)
-        home_prob = max(0.01, min(0.99, home_prob + sit_adj))
+        home_prob, away_prob = logistic_win_probability(
+            home_z, away_z, home_advantage=home_advantage, k=logistic_k
+        )
+        # Apply situational + goalie adjustments
+        total_adj = sit_adj + goalie_adj
+        home_prob = max(0.01, min(0.99, home_prob + total_adj))
         away_prob = 1.0 - home_prob
 
         conf = prediction_confidence(
@@ -296,9 +330,22 @@ class EdgeScoringAgent:
                     )
                     sit_adj = sit.get("total_adj", 0.0)
 
+            # Goalie matchup adjustment
+            g_adj = 0.0
+            home_m = team_strength.get(home_team)
+            away_m = team_strength.get(away_team)
+            if home_m and away_m and home_m.starter_save_pct and away_m.starter_save_pct:
+                g_adj = goalie_matchup_adjustment(
+                    home_m.starter_save_pct,
+                    away_m.starter_save_pct,
+                    config.goalie_impact,
+                )
+
             home_prob_model, away_prob_model, conf = (
                 self._estimate_win_probability(
-                    home_team, away_team, team_strength, sit_adj
+                    home_team, away_team, team_strength, sit_adj, g_adj,
+                    home_advantage=config.home_advantage,
+                    logistic_k=config.logistic_k,
                 )
             )
 

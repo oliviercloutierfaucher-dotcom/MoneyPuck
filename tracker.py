@@ -31,6 +31,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     parser.add_argument("--persist", action="store_true", help="Save predictions to SQLite database")
     parser.add_argument("--validate", action="store_true", help="Print model health report from stored predictions")
+    # Tunable model parameters
+    parser.add_argument("--half-life", type=float, default=30.0, help="Decay half-life in days for game weighting")
+    parser.add_argument("--regression-k", type=int, default=20, help="Bayesian regression-to-mean sample size")
+    parser.add_argument("--home-advantage", type=float, default=0.15, help="Home ice advantage in z-score space")
+    parser.add_argument("--logistic-k", type=float, default=1.0, help="Logistic scaling constant")
+    parser.add_argument("--goalie-impact", type=float, default=1.5, help="Goalie save%% impact scaling factor")
+    parser.add_argument("--backtest", action="store_true", help="Run backtesting against historical data")
     return parser.parse_args()
 
 
@@ -68,6 +75,11 @@ def main() -> int:
         kelly_fraction=args.kelly_fraction,
         max_nightly_exposure=args.max_nightly_exposure,
         persist=args.persist,
+        half_life=args.half_life,
+        regression_k=args.regression_k,
+        home_advantage=args.home_advantage,
+        logistic_k=args.logistic_k,
+        goalie_impact=args.goalie_impact,
     )
 
     try:
@@ -79,6 +91,18 @@ def main() -> int:
                 settled = db.get_predictions()
                 settled = [s for s in settled if s.get("outcome") is not None]
             report = model_health_report(settled)
+            print(json.dumps(report, indent=2))
+            return 0
+
+        if args.backtest:
+            from app.backtester import backtest_season, evaluate_predictions
+            from app.data_sources import fetch_moneypuck_games
+            print("Fetching historical data...")
+            games = fetch_moneypuck_games(config.season)
+            print(f"Backtesting {len(games)} games...")
+            preds = backtest_season(games, config)
+            report = evaluate_predictions(preds)
+            report["n_predictions"] = len(preds)
             print(json.dumps(report, indent=2))
             return 0
 

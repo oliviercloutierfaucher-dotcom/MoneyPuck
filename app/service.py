@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import json
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from .agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgent, RiskAgent, TeamStrengthAgent
 from .models import MarketSnapshot, TrackerConfig
+from .nhl_api import fetch_goalie_stats
+
+
+def _fetch_goalies_safe() -> list[dict]:
+    """Best-effort goalie stats — returns empty list on failure."""
+    try:
+        return fetch_goalie_stats()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: goalie fetch failed: {exc}", file=sys.stderr)
+        return []
 
 
 def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[dict[str, str]]]:
@@ -17,15 +28,18 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     data_agent = MoneyPuckDataAgent()
     strength_agent = TeamStrengthAgent()
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         odds_future = pool.submit(market_agent.run, config)
         moneypuck_future = pool.submit(data_agent.run, config)
+        goalie_future = pool.submit(_fetch_goalies_safe)
         odds_events = odds_future.result()
         games_rows = moneypuck_future.result()
+        goalie_stats = goalie_future.result()
 
     snapshot = MarketSnapshot(
         odds_events=odds_events,
-        team_strength=strength_agent.run(games_rows),
+        team_strength=strength_agent.run(games_rows, config, goalie_stats),
+        goalie_stats=goalie_stats,
     )
     return snapshot, games_rows
 
@@ -48,9 +62,9 @@ def run_tracker(config: TrackerConfig) -> list[dict[str, object]]:
     """Run a full cycle with specialized agents.
 
     Organization model:
-    - market-odds-agent and moneypuck-data-agent run in parallel
-    - team-strength-agent builds ratings
-    - edge-scoring-agent prices edges (with situational adjustments)
+    - market-odds-agent, moneypuck-data-agent, and goalie-fetch run in parallel
+    - team-strength-agent builds ratings (enriched with goalie data)
+    - edge-scoring-agent prices edges (with situational + goalie adjustments)
     - risk-agent produces bankroll-aware stake sizes
     - (optional) persist predictions to SQLite
     """
@@ -90,6 +104,10 @@ def _persist_recommendations(
                 "min_edge": config.min_edge,
                 "min_ev": config.min_ev,
                 "kelly_fraction": config.kelly_fraction,
+                "half_life": config.half_life,
+                "regression_k": config.regression_k,
+                "home_advantage": config.home_advantage,
+                "goalie_impact": config.goalie_impact,
             }),
             total_candidates=len(recommendations),
             total_stake=total_stake,

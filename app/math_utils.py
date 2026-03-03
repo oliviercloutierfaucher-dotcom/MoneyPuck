@@ -154,3 +154,29 @@ def confidence_adjusted_kelly(
 ) -> float:
     """Kelly scaled by both fractional multiplier and model confidence."""
     return fractional_kelly(model_probability, decimal_odds, fraction) * confidence
+
+
+# ---------------------------------------------------------------------------
+# Goalie matchup adjustment
+# ---------------------------------------------------------------------------
+
+LEAGUE_AVG_SAVE_PCT = 0.905
+
+
+def goalie_matchup_adjustment(
+    home_save_pct: float,
+    away_save_pct: float,
+    impact_scaling: float = 1.5,
+) -> float:
+    """Win probability adjustment based on goalie save-percentage differential.
+
+    A 0.01 save% difference translates to roughly *impact_scaling* percentage
+    points of win probability.  Default 1.5 means a starter with 0.920 sv%
+    vs. a backup with 0.900 sv% gives the home team +3pp.
+
+    Returns adjustment from the **home team's perspective** (positive = home
+    team has the better goalie).
+    """
+    if home_save_pct <= 0 or away_save_pct <= 0:
+        return 0.0
+    return (home_save_pct - away_save_pct) * impact_scaling * 100
