@@ -23,6 +23,7 @@ def test_to_serializable_and_html_preview():
     assert serialized[0]["home_team"] == "MTL"
     assert serialized[0]["recommended_stake"] == 30.0
     assert serialized[0]["model_probability"] == 0.55
+    assert "confidence" in serialized[0]
 
     html = render_html_preview(recommendations)
     assert "MoneyPuck Edge Intelligence" in html

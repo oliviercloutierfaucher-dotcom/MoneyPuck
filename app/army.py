@@ -10,11 +10,11 @@ from .service import build_market_snapshot, score_snapshot
 
 
 ARMY_PROFILES: dict[str, dict[str, float]] = {
-    "scout": {"min_edge": 1.0, "min_ev": 0.0, "max_fraction_per_bet": 0.02},
-    "balanced": {"min_edge": 2.0, "min_ev": 0.02, "max_fraction_per_bet": 0.03},
-    "sniper": {"min_edge": 3.5, "min_ev": 0.05, "max_fraction_per_bet": 0.025},
-    "aggressive": {"min_edge": 2.5, "min_ev": 0.03, "max_fraction_per_bet": 0.05},
-    "capital-preservation": {"min_edge": 4.0, "min_ev": 0.06, "max_fraction_per_bet": 0.015},
+    "scout": {"min_edge": 1.0, "min_ev": 0.0, "max_fraction_per_bet": 0.02, "kelly_fraction": 0.3, "max_nightly_exposure": 0.10},
+    "balanced": {"min_edge": 2.0, "min_ev": 0.02, "max_fraction_per_bet": 0.03, "kelly_fraction": 0.5, "max_nightly_exposure": 0.15},
+    "sniper": {"min_edge": 3.5, "min_ev": 0.05, "max_fraction_per_bet": 0.025, "kelly_fraction": 0.5, "max_nightly_exposure": 0.12},
+    "aggressive": {"min_edge": 2.5, "min_ev": 0.03, "max_fraction_per_bet": 0.05, "kelly_fraction": 0.7, "max_nightly_exposure": 0.20},
+    "capital-preservation": {"min_edge": 4.0, "min_ev": 0.06, "max_fraction_per_bet": 0.015, "kelly_fraction": 0.25, "max_nightly_exposure": 0.08},
 }
 
 
@@ -29,6 +29,8 @@ def _run_profile(
         min_edge=tuning["min_edge"],
         min_ev=tuning["min_ev"],
         max_fraction_per_bet=tuning["max_fraction_per_bet"],
+        kelly_fraction=tuning.get("kelly_fraction", base_config.kelly_fraction),
+        max_nightly_exposure=tuning.get("max_nightly_exposure", base_config.max_nightly_exposure),
     )
     recommendations = score_snapshot(shared_snapshot, profile_config)
     serializable = to_serializable(recommendations)

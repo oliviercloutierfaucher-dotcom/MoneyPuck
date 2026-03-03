@@ -25,6 +25,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-ev", type=float, default=0.02)
     parser.add_argument("--bankroll", type=float, default=1000.0)
     parser.add_argument("--max-fraction-per-bet", type=float, default=0.03)
+    parser.add_argument("--kelly-fraction", type=float, default=0.5, help="Kelly multiplier (0.5 = half-Kelly)")
+    parser.add_argument("--max-nightly-exposure", type=float, default=0.15, help="Max total stake per night as fraction of bankroll")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
     parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     return parser.parse_args()
@@ -61,6 +63,8 @@ def main() -> int:
         min_ev=args.min_ev,
         bankroll=args.bankroll,
         max_fraction_per_bet=args.max_fraction_per_bet,
+        kelly_fraction=args.kelly_fraction,
+        max_nightly_exposure=args.max_nightly_exposure,
     )
 
     try:

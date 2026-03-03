@@ -53,6 +53,7 @@ def _demo_recommendations() -> list[dict[str, object]]:
         edge_probability_points=7.49,
         expected_value_per_dollar=0.161,
         kelly_fraction=0.12,
+        confidence=0.82,
     )
     return [{"candidate": candidate, "recommended_stake": 30.0, "stake_fraction": 0.03}]
 
