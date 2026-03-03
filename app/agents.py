@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from .data_sources import fetch_moneypuck_games, fetch_odds, safe_float
+from .logging_config import get_logger
 from .math_utils import (
     DEFAULT_METRIC_WEIGHTS,
     american_to_decimal,
@@ -25,6 +26,8 @@ from .math_utils import (
 from .models import TeamMetrics, TrackerConfig, ValueCandidate
 from .nhl_api import fetch_goalie_stats, infer_likely_starter
 from .situational import situational_adjustments
+
+log = get_logger("agents")
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +360,13 @@ class EdgeScoringAgent:
                         side = outcome.get("name", "")
                         if side not in {home_team, away_team}:
                             continue
-                        price = int(outcome.get("price"))
+                        try:
+                            price = int(outcome.get("price", 0))
+                        except (ValueError, TypeError):
+                            log.warning("Skipping outcome with invalid price: %s", outcome.get("price"))
+                            continue
+                        if price == 0:
+                            continue
                         decimal_odds = american_to_decimal(price)
                         implied = american_to_implied_probability(price)
                         model_p = home_prob_model if side == home_team else away_prob_model

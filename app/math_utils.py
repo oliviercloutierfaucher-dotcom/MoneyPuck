@@ -29,12 +29,16 @@ def american_to_implied_probability(american_odds: int) -> float:
 # ---------------------------------------------------------------------------
 
 def expected_value_per_dollar(model_probability: float, decimal_odds: float) -> float:
+    model_probability = _clamp_probability(model_probability)
+    if decimal_odds <= 1.0:
+        return 0.0
     win_profit = decimal_odds - 1
     return model_probability * win_profit - (1 - model_probability)
 
 
 def kelly_fraction(model_probability: float, decimal_odds: float) -> float:
     """Kelly criterion fraction; clipped at zero for no-bet outcomes."""
+    model_probability = _clamp_probability(model_probability)
     b = decimal_odds - 1
     q = 1 - model_probability
     if b <= 0:
@@ -47,10 +51,17 @@ def kelly_fraction(model_probability: float, decimal_odds: float) -> float:
 # Phase 1: Team strength utilities
 # ---------------------------------------------------------------------------
 
+def _clamp_probability(p: float) -> float:
+    """Clamp a probability to [0.0, 1.0]."""
+    return max(0.0, min(1.0, p))
+
+
 def exponential_decay_weight(days_ago: float, half_life: float = 30.0) -> float:
     """Exponential decay weight.  A game *half_life* days ago gets weight 0.5."""
     if days_ago < 0:
         return 0.0
+    if half_life <= 0:
+        return 1.0 if days_ago == 0 else 0.0
     return math.exp(-math.log(2) * days_ago / half_life)
 
 
@@ -120,10 +131,15 @@ def logistic_win_probability(
 
     *home_advantage* is added to the home side in z-score space.
     *k* is a scaling constant (1.0 means 1-std difference ≈ 73% win prob).
-    Returns (home_prob, away_prob).
+    Returns (home_prob, away_prob), each clamped to [0.01, 0.99].
     """
     diff = (home_strength + home_advantage) - away_strength
-    home_prob = 1.0 / (1.0 + math.exp(-k * diff))
+    # Guard against overflow for extreme differences
+    exponent = -k * diff
+    exponent = max(-500, min(500, exponent))
+    home_prob = 1.0 / (1.0 + math.exp(exponent))
+    # Clamp to prevent degenerate probabilities
+    home_prob = max(0.01, min(0.99, home_prob))
     return home_prob, 1.0 - home_prob
 
 
@@ -153,6 +169,7 @@ def confidence_adjusted_kelly(
     fraction: float = 0.5,
 ) -> float:
     """Kelly scaled by both fractional multiplier and model confidence."""
+    confidence = _clamp_probability(confidence)
     return fractional_kelly(model_probability, decimal_odds, fraction) * confidence
 
 

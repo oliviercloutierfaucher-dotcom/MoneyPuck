@@ -1,7 +1,7 @@
 """NHL public API client for live schedule, goalie, and standings data.
 
 This module provides best-effort enrichment data from the NHL's public API
-(https://api-web.nhle.com). All functions are resilient — they return empty
+(https://api-web.nhle.com). All functions are resilient -- they return empty
 collections or None on failure and never propagate exceptions.
 
 Phase 6 addition to the MoneyPuck betting model pipeline.
@@ -10,10 +10,13 @@ Phase 6 addition to the MoneyPuck betting model pipeline.
 from __future__ import annotations
 
 import json
-import sys
 from datetime import date
 from typing import Any
 from urllib.request import Request, urlopen
+
+from .logging_config import get_logger
+
+log = get_logger("nhl_api")
 
 NHL_API_BASE = "https://api-web.nhle.com/v1"
 
@@ -26,7 +29,7 @@ def _fetch_json(url: str, timeout: int = 15) -> dict:
     """Fetch *url* and return parsed JSON as a dict.
 
     Returns an empty dict on **any** error so callers never need to handle
-    exceptions — this is a best-effort enrichment layer.
+    exceptions -- this is a best-effort enrichment layer.
     """
     try:
         req = Request(url, headers={"User-Agent": "MoneyPuck/1.0"})
@@ -34,7 +37,7 @@ def _fetch_json(url: str, timeout: int = 15) -> dict:
             raw = resp.read().decode("utf-8")
         return json.loads(raw)
     except Exception as exc:  # noqa: BLE001
-        print(f"Warning: NHL API request failed for {url}: {exc}", file=sys.stderr)
+        log.warning("NHL API request failed for %s: %s", url, exc)
         return {}
 
 
@@ -49,9 +52,9 @@ def fetch_schedule(date: str | None = None) -> list[dict[str, Any]]:
 
     Returns a list of game dicts, each containing at minimum:
         - game_id   (int)
-        - home_team (str — three-letter abbreviation)
-        - away_team (str — three-letter abbreviation)
-        - start_time (str — UTC ISO-8601)
+        - home_team (str -- three-letter abbreviation)
+        - away_team (str -- three-letter abbreviation)
+        - start_time (str -- UTC ISO-8601)
         - game_state (str)
     """
     if date is None:
@@ -163,7 +166,7 @@ def fetch_goalie_stats(season: str = "20242025") -> list[dict[str, Any]]:
                 "wins": int(entry.get("wins", 0)),
             }
 
-    # Secondary: wins leaders — merge win counts we may have missed.
+    # Secondary: wins leaders -- merge win counts we may have missed.
     wins_url = (
         f"{NHL_API_BASE}/goalie-stats-leaders/current"
         f"?categories=wins&limit=200"
@@ -195,6 +198,7 @@ def fetch_goalie_stats(season: str = "20242025") -> list[dict[str, Any]]:
                     "wins": int(entry.get("value", 0)),
                 }
 
+    log.info("Fetched stats for %d goalies", len(goalies_by_name))
     return list(goalies_by_name.values())
 
 

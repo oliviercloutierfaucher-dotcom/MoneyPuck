@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import json
-import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from .agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgent, RiskAgent, TeamStrengthAgent
+from .logging_config import get_logger
 from .models import MarketSnapshot, TrackerConfig
 from .nhl_api import fetch_goalie_stats
 
+log = get_logger("service")
+
 
 def _fetch_goalies_safe() -> list[dict]:
-    """Best-effort goalie stats — returns empty list on failure."""
+    """Best-effort goalie stats -- returns empty list on failure."""
     try:
         return fetch_goalie_stats()
     except Exception as exc:  # noqa: BLE001
-        print(f"Warning: goalie fetch failed: {exc}", file=sys.stderr)
+        log.warning("Goalie fetch failed (non-critical): %s", exc)
         return []
 
 
@@ -24,6 +26,7 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     Returns the snapshot **and** the raw MoneyPuck game rows so that
     downstream agents (e.g. situational factors) can use them.
     """
+    log.info("Building market snapshot (region=%s, season=%d)", config.region, config.season)
     market_agent = MarketOddsAgent()
     data_agent = MoneyPuckDataAgent()
     strength_agent = TeamStrengthAgent()
@@ -36,11 +39,17 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
         games_rows = moneypuck_future.result()
         goalie_stats = goalie_future.result()
 
+    log.info(
+        "Snapshot data: %d odds events, %d game rows, %d goalies",
+        len(odds_events), len(games_rows), len(goalie_stats),
+    )
+
     snapshot = MarketSnapshot(
         odds_events=odds_events,
         team_strength=strength_agent.run(games_rows, config, goalie_stats),
         goalie_stats=goalie_stats,
     )
+    log.info("Team strength computed for %d teams", len(snapshot.team_strength))
     return snapshot, games_rows
 
 
@@ -55,7 +64,12 @@ def score_snapshot(
     candidates = edge_agent.run(
         snapshot.odds_events, snapshot.team_strength, config, games_rows
     )
-    return risk_agent.run(candidates, config)
+    recommendations = risk_agent.run(candidates, config)
+    log.info(
+        "Scoring complete: %d candidates -> %d recommendations",
+        len(candidates), len(recommendations),
+    )
+    return recommendations
 
 
 def run_tracker(config: TrackerConfig) -> list[dict[str, object]]:
@@ -86,31 +100,35 @@ def _persist_recommendations(
     """Save recommendations to the tracker database."""
     from .database import TrackerDatabase
 
-    with TrackerDatabase() as db:
-        for rec in recommendations:
-            db.save_prediction(rec, profile=profile)
+    try:
+        with TrackerDatabase() as db:
+            for rec in recommendations:
+                db.save_prediction(rec, profile=profile)
 
-        # Save run summary
-        total_stake = sum(float(r["recommended_stake"]) for r in recommendations)
-        edges = [r["candidate"].edge_probability_points for r in recommendations]
-        evs = [r["candidate"].expected_value_per_dollar for r in recommendations]
-        avg_edge = sum(edges) / len(edges) if edges else 0.0
-        avg_ev = sum(evs) / len(evs) if evs else 0.0
+            # Save run summary
+            total_stake = sum(float(r["recommended_stake"]) for r in recommendations)
+            edges = [r["candidate"].edge_probability_points for r in recommendations]
+            evs = [r["candidate"].expected_value_per_dollar for r in recommendations]
+            avg_edge = sum(edges) / len(edges) if edges else 0.0
+            avg_ev = sum(evs) / len(evs) if evs else 0.0
 
-        db.save_run(
-            profile=profile,
-            config_json=json.dumps({
-                "season": config.season,
-                "min_edge": config.min_edge,
-                "min_ev": config.min_ev,
-                "kelly_fraction": config.kelly_fraction,
-                "half_life": config.half_life,
-                "regression_k": config.regression_k,
-                "home_advantage": config.home_advantage,
-                "goalie_impact": config.goalie_impact,
-            }),
-            total_candidates=len(recommendations),
-            total_stake=total_stake,
-            avg_edge=avg_edge,
-            avg_ev=avg_ev,
-        )
+            db.save_run(
+                profile=profile,
+                config_json=json.dumps({
+                    "season": config.season,
+                    "min_edge": config.min_edge,
+                    "min_ev": config.min_ev,
+                    "kelly_fraction": config.kelly_fraction,
+                    "half_life": config.half_life,
+                    "regression_k": config.regression_k,
+                    "home_advantage": config.home_advantage,
+                    "goalie_impact": config.goalie_impact,
+                }),
+                total_candidates=len(recommendations),
+                total_stake=total_stake,
+                avg_edge=avg_edge,
+                avg_ev=avg_ev,
+            )
+        log.info("Persisted %d predictions to database", len(recommendations))
+    except Exception:
+        log.exception("Failed to persist predictions")

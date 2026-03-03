@@ -1,39 +1,68 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from .logging_config import get_logger, setup_logging
 from .models import TrackerConfig, ValueCandidate
 from .presentation import render_html_preview, to_serializable
 from .service import run_tracker
 
+log = get_logger("web_preview")
+
+SUPPORTED_REGIONS = {"ca", "us"}
+
 
 def _float_param(params: dict[str, list[str]], name: str, default: float) -> float:
-    value = params.get(name, [str(default)])[0]
-    return float(value)
+    try:
+        value = params.get(name, [str(default)])[0]
+        result = float(value)
+        if not math.isfinite(result):
+            return default
+        return result
+    except (ValueError, TypeError):
+        return default
 
 
 def _int_param(params: dict[str, list[str]], name: str, default: int) -> int:
-    value = params.get(name, [str(default)])[0]
-    return int(value)
+    try:
+        value = params.get(name, [str(default)])[0]
+        return int(value)
+    except (ValueError, TypeError):
+        return default
 
 
 def _build_config(params: dict[str, list[str]]) -> TrackerConfig:
-    api_key = params.get("odds_api_key", [os.getenv("ODDS_API_KEY", "")])[0]
+    """Build a TrackerConfig from query parameters.
+
+    API key is read ONLY from the environment variable for security.
+    """
+    api_key = os.getenv("ODDS_API_KEY", "")
     if not api_key:
-        raise ValueError("Missing Odds API key. Set ODDS_API_KEY or pass odds_api_key query param.")
+        raise ValueError(
+            "Missing Odds API key. Set the ODDS_API_KEY environment variable."
+        )
+
+    region = params.get("region", ["ca"])[0]
+    if region not in SUPPORTED_REGIONS:
+        raise ValueError(f"Unsupported region '{region}'. Must be one of: {sorted(SUPPORTED_REGIONS)}")
+
+    bankroll = _float_param(params, "bankroll", 1000.0)
+    if bankroll <= 0:
+        raise ValueError("Bankroll must be positive")
 
     return TrackerConfig(
         odds_api_key=api_key,
-        region=params.get("region", ["ca"])[0],
+        region=region,
         bookmakers=params.get("bookmakers", [""])[0],
         season=_int_param(params, "season", 2024),
-        min_edge=_float_param(params, "min_edge", 2.0),
-        min_ev=_float_param(params, "min_ev", 0.02),
-        bankroll=_float_param(params, "bankroll", 1000.0),
-        max_fraction_per_bet=_float_param(params, "max_fraction_per_bet", 0.03),
+        min_edge=max(0.0, _float_param(params, "min_edge", 2.0)),
+        min_ev=max(0.0, _float_param(params, "min_ev", 0.02)),
+        bankroll=bankroll,
+        max_fraction_per_bet=min(1.0, max(0.0, _float_param(params, "max_fraction_per_bet", 0.03))),
     )
 
 
@@ -71,11 +100,26 @@ class PreviewHandler(BaseHTTPRequestHandler):
             else:
                 config = _build_config(params)
                 recommendations = run_tracker(config)
-        except Exception as exc:
+        except ValueError as exc:
+            log.warning("Bad request: %s", exc)
             self.send_response(400)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+        except (OSError, TimeoutError) as exc:
+            log.error("Network error during tracker run: %s", exc)
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Upstream data source unavailable"}).encode("utf-8"))
+            return
+        except Exception:
+            log.exception("Unexpected error during tracker run")
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Internal server error"}).encode("utf-8"))
             return
 
         if parsed.path == "/api/opportunities":
@@ -99,12 +143,17 @@ class PreviewHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({"error": "Not found"}).encode("utf-8"))
 
+    def log_message(self, format: str, *args: object) -> None:
+        """Route BaseHTTPRequestHandler logs through our logger."""
+        log.info(format, *args)
+
 
 def main() -> None:
+    setup_logging()
     host = os.getenv("PREVIEW_HOST", "0.0.0.0")
     port = int(os.getenv("PREVIEW_PORT", "8080"))
     server = ThreadingHTTPServer((host, port), PreviewHandler)
-    print(f"Preview running on http://{host}:{port}")
+    log.info("Preview server starting on http://%s:%d", host, port)
     server.serve_forever()
 
 

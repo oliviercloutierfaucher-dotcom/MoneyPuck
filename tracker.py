@@ -6,11 +6,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 
 from app.army import run_agent_army
+from app.logging_config import get_logger, setup_logging
 from app.models import TrackerConfig
 from app.presentation import to_serializable
 from app.service import run_tracker
+
+log = get_logger("cli")
 
 SUPPORTED_REGIONS = {"ca", "us"}
 
@@ -38,7 +42,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logistic-k", type=float, default=1.0, help="Logistic scaling constant")
     parser.add_argument("--goalie-impact", type=float, default=1.5, help="Goalie save%% impact scaling factor")
     parser.add_argument("--backtest", action="store_true", help="Run backtesting against historical data")
+    parser.add_argument("--log-level", default=None, help="Logging level (DEBUG, INFO, WARNING, ERROR)")
     return parser.parse_args()
+
+
+def _validate_args(args: argparse.Namespace) -> str | None:
+    """Validate CLI arguments. Returns error message or None if valid."""
+    if not args.odds_api_key:
+        return "Missing Odds API key. Set ODDS_API_KEY or pass --odds-api-key."
+    if args.bankroll <= 0:
+        return "Bankroll must be positive."
+    if args.kelly_fraction <= 0 or args.kelly_fraction > 1.0:
+        return "Kelly fraction must be between 0 (exclusive) and 1.0 (inclusive)."
+    if args.max_fraction_per_bet <= 0 or args.max_fraction_per_bet > 1.0:
+        return "Max fraction per bet must be between 0 (exclusive) and 1.0 (inclusive)."
+    if args.max_nightly_exposure <= 0 or args.max_nightly_exposure > 1.0:
+        return "Max nightly exposure must be between 0 (exclusive) and 1.0 (inclusive)."
+    if args.half_life <= 0:
+        return "Half-life must be positive."
+    if args.logistic_k <= 0:
+        return "Logistic scaling constant must be positive."
+    return None
 
 
 def _print_human(recommendations: list[dict[str, object]]) -> None:
@@ -59,8 +83,12 @@ def _print_human(recommendations: list[dict[str, object]]) -> None:
 
 def main() -> int:
     args = parse_args()
-    if not args.odds_api_key:
-        print("Missing Odds API key. Set ODDS_API_KEY or pass --odds-api-key.")
+    setup_logging(args.log_level)
+
+    error = _validate_args(args)
+    if error:
+        log.error(error)
+        print(error, file=sys.stderr)
         return 1
 
     config = TrackerConfig(
@@ -97,9 +125,9 @@ def main() -> int:
         if args.backtest:
             from app.backtester import backtest_season, evaluate_predictions
             from app.data_sources import fetch_moneypuck_games
-            print("Fetching historical data...")
+            log.info("Starting backtest for season %d", config.season)
             games = fetch_moneypuck_games(config.season)
-            print(f"Backtesting {len(games)} games...")
+            log.info("Backtesting %d games", len(games))
             preds = backtest_season(games, config)
             report = evaluate_predictions(preds)
             report["n_predictions"] = len(preds)
@@ -112,8 +140,17 @@ def main() -> int:
             return 0
 
         recommendations = run_tracker(config)
-    except Exception as exc:
-        print(f"Tracker run failed: {exc}")
+    except ValueError as exc:
+        log.error("Configuration error: %s", exc)
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, TimeoutError) as exc:
+        log.error("Network error: %s", exc)
+        print(f"Network error: {exc}", file=sys.stderr)
+        return 2
+    except Exception:
+        log.exception("Unexpected error during tracker run")
+        print("Tracker run failed unexpectedly. Check logs for details.", file=sys.stderr)
         return 2
 
     if args.json:

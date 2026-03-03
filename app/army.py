@@ -4,10 +4,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from typing import Any
 
+from .logging_config import get_logger
 from .models import TrackerConfig
 from .presentation import to_serializable
 from .service import build_market_snapshot, score_snapshot
 
+log = get_logger("army")
 
 ARMY_PROFILES: dict[str, dict[str, float]] = {
     "scout": {"min_edge": 1.0, "min_ev": 0.0, "max_fraction_per_bet": 0.02, "kelly_fraction": 0.3, "max_nightly_exposure": 0.10},
@@ -36,6 +38,7 @@ def _run_profile(
     recommendations = score_snapshot(shared_snapshot, profile_config, games_rows)
     serializable = to_serializable(recommendations)
 
+    log.info("Profile '%s': %d opportunities found", profile_name, len(serializable))
     return {
         "profile": profile_name,
         "config": {
@@ -54,6 +57,7 @@ def run_agent_army(base_config: TrackerConfig, max_workers: int = 5) -> list[dic
     This avoids duplicate provider calls and keeps every profile compared on
     the exact same market data instant.
     """
+    log.info("Starting army mode with %d profiles", len(ARMY_PROFILES))
     shared_snapshot, games_rows = build_market_snapshot(base_config)
     results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -66,6 +70,8 @@ def run_agent_army(base_config: TrackerConfig, max_workers: int = 5) -> list[dic
             try:
                 results.append(future.result())
             except Exception as exc:
+                log.error("Profile '%s' failed: %s", profile, exc)
                 results.append({"profile": profile, "error": str(exc), "count": 0, "top_opportunities": []})
 
+    log.info("Army mode complete: %d profiles executed", len(results))
     return sorted(results, key=lambda item: item.get("count", 0), reverse=True)

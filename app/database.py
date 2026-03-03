@@ -1,11 +1,16 @@
 """Phase 4: SQLite persistence layer for prediction tracking."""
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path.home() / ".moneypuck" / "tracker.db"
+from .logging_config import get_logger
+
+log = get_logger("database")
+
+DB_PATH = Path(os.getenv("MONEYPUCK_DB_PATH", str(Path.home() / ".moneypuck" / "tracker.db")))
 
 _SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -60,9 +65,10 @@ CREATE INDEX IF NOT EXISTS idx_predictions_profile
 class TrackerDatabase:
     """SQLite-backed store for predictions and model run summaries."""
 
-    def __init__(self, db_path: Path = DB_PATH) -> None:
-        self._db_path = db_path
+    def __init__(self, db_path: Path | None = None) -> None:
+        self._db_path = db_path or DB_PATH
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        log.debug("Opening database at %s", self._db_path)
         self._conn = sqlite3.connect(str(self._db_path))
         self._conn.row_factory = sqlite3.Row
         self._apply_schema()
@@ -198,6 +204,8 @@ class TrackerDatabase:
         profit_loss: float,
     ) -> None:
         """Mark a prediction as settled with its outcome and P&L."""
+        if outcome not in {"win", "loss", "push"}:
+            raise ValueError(f"Invalid outcome '{outcome}'. Must be 'win', 'loss', or 'push'.")
         self._conn.execute(
             """
             UPDATE predictions
@@ -246,5 +254,5 @@ class TrackerDatabase:
         """Close the underlying database connection."""
         try:
             self._conn.close()
-        except Exception:
+        except sqlite3.ProgrammingError:
             pass

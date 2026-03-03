@@ -170,11 +170,11 @@ def roi_summary(settled: list[dict[str, Any]]) -> dict[str, Any]:
     win_rate = n_wins / n_bets if n_bets else 0.0
 
     return {
-        "total_staked": round(total_staked, 4),
-        "total_pnl": round(total_pnl, 4),
-        "roi_pct": round(roi_pct, 4),
+        "total_staked": round(total_staked, 6),
+        "total_pnl": round(total_pnl, 6),
+        "roi_pct": round(roi_pct, 6),
         "n_bets": n_bets,
-        "win_rate": round(win_rate, 4),
+        "win_rate": round(win_rate, 6),
     }
 
 
