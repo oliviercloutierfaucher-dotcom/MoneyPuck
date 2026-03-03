@@ -185,8 +185,13 @@ def _build_demo_game_rows() -> list[dict[str, str]]:
 
 
 def _build_demo_odds(matchups: list[tuple[str, str, str]]) -> list[dict]:
-    """Build realistic odds events for given matchups."""
+    """Build realistic odds events for given matchups with Quebec-legal books."""
     events = []
+    # Quebec-legal sportsbooks
+    books = [
+        "Bet365", "Betway", "Bet99", "FanDuel", "DraftKings",
+        "BetMGM", "Pinnacle", "Mise-o-jeu", "BetVictor", "PointsBet",
+    ]
     for home, away, commence in matchups:
         # Generate realistic American odds
         random.seed(hash(home + away))
@@ -198,12 +203,12 @@ def _build_demo_odds(matchups: list[tuple[str, str, str]]) -> list[dict]:
             home_odds = random.choice([+110, +115, +120, +130, +140, +150])
             away_odds = random.choice([-120, -130, -140, -150, -160])
 
-        books = ["DraftKings", "FanDuel", "BetMGM", "Caesars"]
         bookmakers = []
         for book in books:
-            # Slight variation per book
-            h_var = random.choice([-5, 0, 0, 5, 10])
-            a_var = random.choice([-5, 0, 0, 5, 10])
+            # Each book has slightly different lines
+            random.seed(hash(home + away + book))
+            h_var = random.choice([-10, -5, 0, 0, 5, 10, 15])
+            a_var = random.choice([-10, -5, 0, 0, 5, 10, 15])
             bookmakers.append({
                 "title": book,
                 "markets": [{

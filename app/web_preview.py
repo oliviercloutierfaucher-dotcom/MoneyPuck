@@ -3,17 +3,25 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from .data_sources import get_books_for_region, QUEBEC_BOOKS
 from .logging_config import get_logger, setup_logging
+from .math_utils import (
+    american_to_decimal,
+    american_to_implied_probability,
+    goalie_matchup_adjustment,
+    logistic_win_probability,
+)
 from .models import TrackerConfig, ValueCandidate
-from .presentation import render_html_preview, to_serializable
-from .service import run_tracker
+from .presentation import render_dashboard, render_html_preview, to_serializable
+from .service import build_market_snapshot, score_snapshot
 
 log = get_logger("web_preview")
 
-SUPPORTED_REGIONS = {"ca", "us"}
+SUPPORTED_REGIONS = {"ca", "us", "qc", "on"}
 
 
 def _float_param(params: dict[str, list[str]], name: str, default: float) -> float:
@@ -47,17 +55,23 @@ def _build_config(params: dict[str, list[str]]) -> TrackerConfig:
         )
 
     region = params.get("region", ["ca"])[0]
-    if region not in SUPPORTED_REGIONS:
-        raise ValueError(f"Unsupported region '{region}'. Must be one of: {sorted(SUPPORTED_REGIONS)}")
+    # Map sub-regions to API region
+    api_region = "ca" if region in {"qc", "on", "ca"} else region
+    if api_region not in {"ca", "us"}:
+        raise ValueError(f"Unsupported region '{region}'.")
 
     bankroll = _float_param(params, "bankroll", 1000.0)
     if bankroll <= 0:
         raise ValueError("Bankroll must be positive")
 
+    # Get bookmaker filter for the region
+    books = get_books_for_region(region)
+    bookmaker_keys = ",".join(books.keys())
+
     return TrackerConfig(
         odds_api_key=api_key,
-        region=region,
-        bookmakers=params.get("bookmakers", [""])[0],
+        region=api_region,
+        bookmakers=bookmaker_keys,
         season=_int_param(params, "season", 2024),
         min_edge=max(0.0, _float_param(params, "min_edge", 2.0)),
         min_ev=max(0.0, _float_param(params, "min_ev", 0.02)),
@@ -66,85 +80,335 @@ def _build_config(params: dict[str, list[str]]) -> TrackerConfig:
     )
 
 
+# ---------------------------------------------------------------------------
+# Demo data builders (Quebec books)
+# ---------------------------------------------------------------------------
+
+DEMO_MATCHUPS = [
+    ("TOR", "MTL", "2026-03-03T19:00:00Z"),
+    ("FLA", "NYR", "2026-03-03T19:30:00Z"),
+    ("EDM", "VAN", "2026-03-03T22:00:00Z"),
+    ("WPG", "CHI", "2026-03-03T20:00:00Z"),
+    ("DAL", "CBJ", "2026-03-03T19:00:00Z"),
+    ("COL", "SJS", "2026-03-03T22:30:00Z"),
+    ("CAR", "DET", "2026-03-03T19:00:00Z"),
+    ("BOS", "BUF", "2026-03-03T19:00:00Z"),
+]
+
+DEMO_STRENGTH = {
+    "FLA": 1.13, "WPG": 0.89, "EDM": 0.87, "CAR": 0.81, "DAL": 0.79,
+    "COL": 0.66, "TOR": 0.51, "VGK": 0.47, "BOS": 0.46, "NYR": 0.40,
+    "NJD": 0.37, "MIN": 0.33, "TBL": 0.30, "VAN": 0.19, "LAK": 0.14,
+    "OTT": 0.03, "WSH": 0.02, "CGY": -0.01, "SEA": -0.09, "NYI": -0.14,
+    "DET": -0.17, "STL": -0.19, "PHI": -0.32, "PIT": -0.35, "BUF": -0.51,
+    "ANA": -0.70, "MTL": -0.74, "UTA": -0.76, "NSH": -0.78, "CBJ": -0.80,
+    "SJS": -1.35, "CHI": -1.45,
+}
 
 
-def _demo_recommendations() -> list[dict[str, object]]:
-    candidate = ValueCandidate(
-        commence_time_utc="2026-01-01T00:00:00Z",
-        home_team="MTL",
-        away_team="TOR",
-        side="MTL",
-        sportsbook="DemoBook",
-        american_odds=115,
-        decimal_odds=2.15,
-        implied_probability=0.4651,
-        model_probability=0.54,
-        edge_probability_points=7.49,
-        expected_value_per_dollar=0.161,
-        kelly_fraction=0.12,
-        confidence=0.82,
-    )
-    return [{"candidate": candidate, "recommended_stake": 30.0, "stake_fraction": 0.03}]
+def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
+    """Build full demo dashboard data with Quebec books."""
+    region = params.get("region", ["qc"])[0]
+    books = get_books_for_region(region)
+    book_names = list(books.values())
+    bankroll = _float_param(params, "bankroll", 1000.0)
+    min_edge = _float_param(params, "min_edge", 2.0)
+    min_ev = _float_param(params, "min_ev", 0.02)
+
+    games = []
+    value_bets = []
+
+    for home, away, commence in DEMO_MATCHUPS:
+        random.seed(hash(home + away + "qc"))
+        hs = DEMO_STRENGTH.get(home, 0)
+        as_ = DEMO_STRENGTH.get(away, 0)
+
+        # Model probability from strength differential
+        diff = hs - as_ + 0.15  # home advantage
+        home_prob = 1 / (1 + math.exp(-diff))
+        away_prob = 1 - home_prob
+
+        # Generate per-book odds
+        game_books = []
+        for bk_key, bk_name in books.items():
+            random.seed(hash(home + away + bk_key))
+            # Base odds from model probability + vig
+            vig = random.uniform(0.03, 0.06)
+            if home_prob > 0.5:
+                h_implied = home_prob + vig / 2
+                a_implied = away_prob + vig / 2
+            else:
+                h_implied = home_prob + vig / 2
+                a_implied = away_prob + vig / 2
+
+            # Convert to American
+            h_implied = max(0.05, min(0.95, h_implied + random.gauss(0, 0.03)))
+            a_implied = max(0.05, min(0.95, a_implied + random.gauss(0, 0.03)))
+            h_odds = _implied_to_american(h_implied)
+            a_odds = _implied_to_american(a_implied)
+
+            # Edge = model prob - book implied
+            h_edge = (home_prob - h_implied) * 100
+            a_edge = (away_prob - a_implied) * 100
+
+            game_books.append({
+                "name": bk_name,
+                "key": bk_key,
+                "home_odds": h_odds,
+                "away_odds": a_odds,
+                "home_implied": round(h_implied, 4),
+                "away_implied": round(a_implied, 4),
+                "home_edge": round(h_edge, 2),
+                "away_edge": round(a_edge, 2),
+            })
+
+            # Check for value bets
+            for side, model_p, impl_p, odds in [
+                (home, home_prob, h_implied, h_odds),
+                (away, away_prob, a_implied, a_odds),
+            ]:
+                edge_pp = (model_p - impl_p) * 100
+                dec_odds = american_to_decimal(odds)
+                ev = model_p * (dec_odds - 1) - (1 - model_p)
+                if edge_pp >= min_edge and ev >= min_ev:
+                    stake = min(bankroll * 0.03, bankroll * 0.15 / 5)
+                    value_bets.append({
+                        "commence_time_utc": commence,
+                        "home_team": home,
+                        "away_team": away,
+                        "side": side,
+                        "sportsbook": bk_name,
+                        "american_odds": odds,
+                        "implied_probability": round(impl_p, 4),
+                        "model_probability": round(model_p, 4),
+                        "edge_probability_points": round(edge_pp, 2),
+                        "expected_value_per_dollar": round(ev, 4),
+                        "kelly_fraction": round(max(0, (model_p * dec_odds - 1) / (dec_odds - 1)) * 0.5, 4),
+                        "confidence": round(0.55 + random.uniform(0, 0.25), 2),
+                        "recommended_stake": round(stake, 2),
+                        "stake_fraction": round(stake / bankroll, 4),
+                    })
+
+        games.append({
+            "home": home,
+            "away": away,
+            "commence": commence,
+            "home_prob": round(home_prob, 4),
+            "away_prob": round(away_prob, 4),
+            "books": game_books,
+        })
+
+    # De-duplicate value bets: keep best per game+side
+    best_bets: dict[str, dict] = {}
+    for vb in value_bets:
+        key = f"{vb['home_team']}-{vb['away_team']}-{vb['side']}-{vb['sportsbook']}"
+        if key not in best_bets or vb["edge_probability_points"] > best_bets[key]["edge_probability_points"]:
+            best_bets[key] = vb
+    value_bets = sorted(best_bets.values(), key=lambda x: x["expected_value_per_dollar"], reverse=True)
+
+    total_stake = sum(b["recommended_stake"] for b in value_bets)
+    avg_edge = sum(b["edge_probability_points"] for b in value_bets) / len(value_bets) if value_bets else 0
+
+    return {
+        "mode": "demo",
+        "games": games,
+        "value_bets": value_bets,
+        "books": book_names,
+        "summary": {
+            "total_bets": len(value_bets),
+            "total_stake": round(total_stake, 2),
+            "avg_edge": round(avg_edge, 2),
+        },
+        "config": {
+            "region": region,
+            "bankroll": bankroll,
+            "min_edge": min_edge,
+            "min_ev": min_ev,
+        },
+    }
+
+
+def _implied_to_american(p: float) -> int:
+    """Convert implied probability to American odds."""
+    if p >= 0.5:
+        return round(-100 * p / (1 - p))
+    else:
+        return round(100 * (1 - p) / p)
+
+
+def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
+    """Build dashboard from live API data."""
+    config = _build_config(params)
+    region = params.get("region", ["qc"])[0]
+    books_map = get_books_for_region(region)
+    book_names = list(books_map.values())
+
+    snapshot, games_rows = build_market_snapshot(config)
+    recommendations = score_snapshot(snapshot, config, games_rows)
+    strength = snapshot.team_strength
+
+    # Build per-game data with per-book odds
+    games = []
+    for event in snapshot.odds_events:
+        home = event.get("home_team", "")
+        away = event.get("away_team", "")
+        commence = event.get("commence_time", "")
+
+        home_m = strength.get(home)
+        away_m = strength.get(away)
+        if not home_m or not away_m:
+            continue
+
+        hp, ap = logistic_win_probability(
+            home_m.home_strength, away_m.away_strength,
+            home_advantage=config.home_advantage, k=config.logistic_k,
+        )
+        if home_m.starter_save_pct and away_m.starter_save_pct:
+            g_adj = goalie_matchup_adjustment(
+                home_m.starter_save_pct, away_m.starter_save_pct,
+                config.goalie_impact,
+            )
+            hp = max(0.01, min(0.99, hp + g_adj))
+            ap = 1.0 - hp
+
+        game_books = []
+        for bm in event.get("bookmakers", []):
+            bm_title = bm.get("title", "")
+            # Filter to our region's books
+            if bm_title not in book_names:
+                # Try matching by key
+                bm_key = bm.get("key", "")
+                if bm_key not in books_map:
+                    continue
+                bm_title = books_map[bm_key]
+
+            for market in bm.get("markets", []):
+                if market.get("key") != "h2h":
+                    continue
+                outcomes = {o["name"]: o.get("price", 0) for o in market.get("outcomes", [])}
+                h_odds = outcomes.get(home, 0)
+                a_odds = outcomes.get(away, 0)
+                if not h_odds or not a_odds:
+                    continue
+
+                h_imp = american_to_implied_probability(h_odds)
+                a_imp = american_to_implied_probability(a_odds)
+
+                game_books.append({
+                    "name": bm_title,
+                    "home_odds": h_odds,
+                    "away_odds": a_odds,
+                    "home_implied": round(h_imp, 4),
+                    "away_implied": round(a_imp, 4),
+                    "home_edge": round((hp - h_imp) * 100, 2),
+                    "away_edge": round((ap - a_imp) * 100, 2),
+                })
+
+        games.append({
+            "home": home,
+            "away": away,
+            "commence": commence,
+            "home_prob": round(hp, 4),
+            "away_prob": round(ap, 4),
+            "books": game_books,
+        })
+
+    value_bets = to_serializable(recommendations)
+    total_stake = sum(b["recommended_stake"] for b in value_bets)
+    avg_edge = sum(b["edge_probability_points"] for b in value_bets) / len(value_bets) if value_bets else 0
+
+    return {
+        "mode": "live",
+        "games": games,
+        "value_bets": value_bets,
+        "books": book_names,
+        "summary": {
+            "total_bets": len(value_bets),
+            "total_stake": round(total_stake, 2),
+            "avg_edge": round(avg_edge, 2),
+        },
+        "config": {
+            "region": region,
+            "bankroll": config.bankroll,
+            "min_edge": config.min_edge,
+            "min_ev": config.min_ev,
+        },
+    }
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
-
         use_demo = params.get("demo", ["0"])[0] in {"1", "true", "yes"}
 
+        # Force demo if no API key
+        if not os.getenv("ODDS_API_KEY", ""):
+            use_demo = True
+
         try:
-            if use_demo:
-                recommendations = _demo_recommendations()
-            else:
-                config = _build_config(params)
-                recommendations = run_tracker(config)
+            if parsed.path == "/api/dashboard" or parsed.path in {"/", "/index.html"}:
+                if use_demo:
+                    dashboard_data = _build_demo_dashboard(params)
+                else:
+                    dashboard_data = _build_live_dashboard(params)
+
+                if parsed.path == "/api/dashboard":
+                    body = json.dumps(dashboard_data, indent=2).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+
+                # Render HTML dashboard
+                body = render_dashboard(dashboard_data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if parsed.path == "/api/opportunities":
+                if use_demo:
+                    data = _build_demo_dashboard(params)
+                    body = json.dumps(data["value_bets"], indent=2).encode("utf-8")
+                else:
+                    config = _build_config(params)
+                    from .service import run_tracker
+                    recommendations = run_tracker(config)
+                    body = json.dumps(to_serializable(recommendations), indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Not found"}).encode("utf-8"))
+
         except ValueError as exc:
             log.warning("Bad request: %s", exc)
             self.send_response(400)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
-            return
         except (OSError, TimeoutError) as exc:
-            log.error("Network error during tracker run: %s", exc)
+            log.error("Network error: %s", exc)
             self.send_response(502)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Upstream data source unavailable"}).encode("utf-8"))
-            return
         except Exception:
-            log.exception("Unexpected error during tracker run")
+            log.exception("Unexpected error")
             self.send_response(500)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Internal server error"}).encode("utf-8"))
-            return
-
-        if parsed.path == "/api/opportunities":
-            body = json.dumps(to_serializable(recommendations), indent=2).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
-        if parsed.path in {"/", "/index.html"}:
-            body = render_html_preview(recommendations).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
-        self.send_response(404)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(json.dumps({"error": "Not found"}).encode("utf-8"))
 
     def log_message(self, format: str, *args: object) -> None:
-        """Route BaseHTTPRequestHandler logs through our logger."""
         log.info(format, *args)
 
 
@@ -154,6 +418,9 @@ def main() -> None:
     port = int(os.getenv("PREVIEW_PORT", "8080"))
     server = ThreadingHTTPServer((host, port), PreviewHandler)
     log.info("Preview server starting on http://%s:%d", host, port)
+    print(f"\n  MoneyPuck Edge Intelligence Dashboard")
+    print(f"  http://localhost:{port}")
+    print(f"  http://localhost:{port}?demo=1  (demo mode)\n")
     server.serve_forever()
 
 

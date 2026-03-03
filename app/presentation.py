@@ -31,155 +31,690 @@ def to_serializable(recommendations: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 def render_html_preview(recommendations: list[dict[str, Any]]) -> str:
+    """Legacy simple preview — kept for backward compatibility."""
     rows = to_serializable(recommendations)
-    avg_edge = sum(row["edge_probability_points"] for row in rows) / len(rows) if rows else 0.0
-    avg_ev = sum(row["expected_value_per_dollar"] for row in rows) / len(rows) if rows else 0.0
-    initial_rows_json = json.dumps(rows)
+    return render_dashboard({"value_bets": rows, "games": [], "summary": {}, "books": [], "config": {}})
 
-    # Quiver Quant inspired: dense dashboard feel, dark cards, sortable/filterable table.
+
+def render_dashboard(data: dict[str, Any]) -> str:
+    """Render the full multi-book comparison dashboard.
+
+    *data* should contain:
+      - games: list of game dicts with per-book odds
+      - value_bets: list of value bet dicts
+      - summary: dict of KPI stats
+      - books: list of active book names
+      - config: current config dict
+      - rankings: optional list of (team, composite) for power rankings
+    """
+    data_json = json.dumps(data)
+
     return f"""<!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset='utf-8' />
-  <meta name='viewport' content='width=device-width,initial-scale=1' />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>MoneyPuck Edge Intelligence</title>
   <style>
     :root {{
-      --bg: #0b1220;
-      --panel: #121b2d;
-      --panel-2: #17223a;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --accent: #22d3ee;
-      --good: #34d399;
-      --border: #22314e;
+      --bg: #06080f;
+      --bg-2: #0c1120;
+      --panel: #111827;
+      --panel-2: #1a2236;
+      --panel-3: #1e293b;
+      --text: #f1f5f9;
+      --text-2: #cbd5e1;
+      --muted: #64748b;
+      --accent: #06b6d4;
+      --accent-2: #22d3ee;
+      --green: #10b981;
+      --green-bg: rgba(16,185,129,0.1);
+      --green-border: rgba(16,185,129,0.25);
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --amber-bg: rgba(245,158,11,0.1);
+      --border: #1e293b;
+      --border-2: #334155;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+      --radius: 12px;
+      --radius-sm: 8px;
     }}
-    * {{ box-sizing: border-box; }}
-    body {{ margin: 0; font-family: Inter, Segoe UI, Roboto, sans-serif; background: linear-gradient(180deg, #081022, var(--bg)); color: var(--text); }}
-    .wrap {{ max-width: 1280px; margin: 0 auto; padding: 24px; }}
-    .header {{ display:flex; justify-content:space-between; gap:16px; align-items:flex-end; flex-wrap:wrap; margin-bottom:18px; }}
-    h1 {{ margin:0; font-size: 28px; letter-spacing: 0.3px; }}
-    .sub {{ color: var(--muted); margin-top: 6px; font-size: 14px; }}
-    .grid {{ display:grid; grid-template-columns: repeat(4, minmax(180px,1fr)); gap:12px; margin-bottom:14px; }}
-    .card {{ background: var(--panel); border:1px solid var(--border); border-radius: 12px; padding: 12px; }}
-    .card .label {{ color: var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }}
-    .card .value {{ margin-top: 4px; font-size:24px; font-weight:700; }}
-    .controls {{ display:grid; grid-template-columns: repeat(6,minmax(120px,1fr)); gap:10px; margin-bottom:14px; }}
-    .control {{ background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 10px; }}
-    .control label {{ color: var(--muted); font-size:12px; display:block; margin-bottom:6px; }}
-    .control input, .control select {{ width:100%; background: var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:8px; color: var(--text); }}
-    .btns {{ display:flex; gap:8px; align-items:end; }}
-    button {{ background: var(--accent); color:#041019; font-weight:700; border: none; border-radius: 10px; padding: 10px 14px; cursor: pointer; }}
-    button.secondary {{ background: transparent; border:1px solid var(--border); color: var(--text); }}
-    .table-wrap {{ background: var(--panel); border:1px solid var(--border); border-radius: 12px; overflow: auto; }}
-    table {{ border-collapse: collapse; width:100%; min-width: 1060px; }}
-    th, td {{ padding: 10px; border-bottom: 1px solid var(--border); font-size: 13px; text-align:left; }}
-    th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }}
-    .good {{ color: var(--good); font-weight: 600; }}
-    .muted {{ color: var(--muted); }}
-    code {{ background:#0b152a; padding:2px 5px; border-radius:6px; border:1px solid var(--border); }}
-    @media (max-width: 980px) {{ .grid {{ grid-template-columns: repeat(2,1fr); }} .controls {{ grid-template-columns: repeat(2,1fr); }} }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }}
+    .app {{ max-width: 1400px; margin: 0 auto; padding: 0 20px 40px; }}
+
+    /* ---- HEADER ---- */
+    .header {{
+      padding: 24px 0 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }}
+    .brand {{ display: flex; align-items: center; gap: 14px; }}
+    .logo {{
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 900; color: #fff;
+    }}
+    .brand h1 {{ font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }}
+    .brand .sub {{ color: var(--muted); font-size: 13px; margin-top: 2px; }}
+    .header-actions {{ display: flex; gap: 10px; align-items: center; }}
+    .badge {{
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--panel); border: 1px solid var(--border-2);
+      border-radius: 20px; padding: 6px 14px; font-size: 12px;
+      font-weight: 600; color: var(--text-2);
+    }}
+    .badge.live {{ border-color: var(--green); }}
+    .badge.live::before {{
+      content: ''; width: 8px; height: 8px;
+      background: var(--green); border-radius: 50%;
+      animation: pulse 2s infinite;
+    }}
+    .badge.demo {{ border-color: var(--amber); color: var(--amber); }}
+    @keyframes pulse {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.4; }} }}
+
+    /* ---- CONTROLS ---- */
+    .controls {{
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 20px; align-items: center;
+    }}
+    .control-group {{
+      display: flex; align-items: center; gap: 8px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 6px 12px;
+    }}
+    .control-group label {{
+      color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+      white-space: nowrap;
+    }}
+    .control-group input, .control-group select {{
+      background: var(--panel-2); border: 1px solid var(--border-2);
+      border-radius: 6px; padding: 5px 8px; color: var(--text);
+      font-size: 13px; width: 80px;
+    }}
+    .control-group select {{ width: auto; cursor: pointer; }}
+    .btn {{
+      background: var(--accent); color: #0a1628; font-weight: 700;
+      border: none; border-radius: var(--radius-sm); padding: 8px 18px;
+      font-size: 13px; cursor: pointer; transition: all 0.15s;
+      white-space: nowrap;
+    }}
+    .btn:hover {{ background: var(--accent-2); transform: translateY(-1px); }}
+    .btn-ghost {{
+      background: transparent; border: 1px solid var(--border-2);
+      color: var(--text-2);
+    }}
+    .btn-ghost:hover {{ border-color: var(--accent); color: var(--accent); background: transparent; }}
+
+    /* ---- KPI CARDS ---- */
+    .kpis {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px; margin-bottom: 24px;
+    }}
+    .kpi {{
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px;
+      position: relative; overflow: hidden;
+    }}
+    .kpi::after {{
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 3px; background: linear-gradient(90deg, var(--accent), transparent);
+    }}
+    .kpi.green::after {{ background: linear-gradient(90deg, var(--green), transparent); }}
+    .kpi .kpi-label {{
+      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 600;
+    }}
+    .kpi .kpi-value {{
+      font-size: 28px; font-weight: 800; margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }}
+    .kpi .kpi-sub {{ color: var(--muted); font-size: 12px; margin-top: 2px; }}
+
+    /* ---- BOOKS BAR ---- */
+    .books-bar {{
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 24px; align-items: center;
+    }}
+    .books-bar .label {{
+      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 600; margin-right: 4px;
+    }}
+    .book-chip {{
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--panel); border: 1px solid var(--border-2);
+      border-radius: 20px; padding: 5px 14px; font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: all 0.15s;
+      user-select: none; color: var(--text-2);
+    }}
+    .book-chip.active {{
+      background: rgba(6,182,212,0.12); border-color: var(--accent);
+      color: var(--accent);
+    }}
+    .book-chip:hover {{ border-color: var(--accent); }}
+
+    /* ---- SECTION TITLES ---- */
+    .section-title {{
+      font-size: 14px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-2);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+    }}
+    .section-title::after {{
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }}
+    .section-title .count {{
+      background: var(--accent); color: #0a1628; border-radius: 10px;
+      padding: 1px 8px; font-size: 11px; font-weight: 700;
+    }}
+
+    /* ---- GAME CARDS ---- */
+    .games-grid {{
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+      gap: 16px; margin-bottom: 32px;
+    }}
+    .game-card {{
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      transition: border-color 0.2s;
+    }}
+    .game-card:hover {{ border-color: var(--border-2); }}
+    .game-card.has-value {{ border-color: var(--green-border); }}
+    .game-header {{
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      background: var(--panel-2);
+    }}
+    .game-matchup {{
+      display: flex; align-items: center; gap: 12px; font-weight: 700;
+      font-size: 15px;
+    }}
+    .team-badge {{
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 8px;
+      background: var(--panel-3); font-size: 11px; font-weight: 800;
+      color: var(--text); letter-spacing: 0.02em;
+    }}
+    .vs {{ color: var(--muted); font-size: 12px; font-weight: 400; }}
+    .game-time {{ color: var(--muted); font-size: 12px; }}
+    .game-value-tag {{
+      background: var(--green-bg); color: var(--green);
+      border: 1px solid var(--green-border); border-radius: 6px;
+      padding: 2px 10px; font-size: 11px; font-weight: 700;
+    }}
+
+    /* Probability bar */
+    .prob-bar-wrap {{ padding: 12px 18px; }}
+    .prob-labels {{
+      display: flex; justify-content: space-between; font-size: 12px;
+      margin-bottom: 6px;
+    }}
+    .prob-labels .team {{ font-weight: 700; }}
+    .prob-labels .pct {{ font-weight: 600; color: var(--accent); }}
+    .prob-bar {{
+      height: 6px; background: var(--panel-3); border-radius: 3px;
+      overflow: hidden; position: relative;
+    }}
+    .prob-bar .fill {{
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      transition: width 0.4s ease;
+    }}
+
+    /* Book odds table inside game card */
+    .book-odds {{ padding: 0 18px 14px; }}
+    .book-odds table {{ width: 100%; border-collapse: collapse; }}
+    .book-odds th {{
+      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 600; padding: 6px 0;
+      text-align: left; border-bottom: 1px solid var(--border);
+    }}
+    .book-odds td {{
+      padding: 7px 0; font-size: 13px; border-bottom: 1px solid rgba(30,41,59,0.5);
+      font-variant-numeric: tabular-nums;
+    }}
+    .book-odds tr:last-child td {{ border-bottom: none; }}
+    .book-odds .book-name {{ font-weight: 600; color: var(--text-2); }}
+    .book-odds .odds {{ font-weight: 600; }}
+    .book-odds .edge-positive {{ color: var(--green); font-weight: 700; }}
+    .book-odds .edge-negative {{ color: var(--muted); }}
+    .book-odds .best-line {{
+      background: var(--green-bg); border-radius: 4px; padding: 1px 6px;
+    }}
+    .book-odds .value-badge {{
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 10px; font-weight: 700; color: var(--green);
+    }}
+
+    /* ---- VALUE BETS TABLE ---- */
+    .value-section {{ margin-bottom: 32px; }}
+    .value-table-wrap {{
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: auto;
+    }}
+    .value-table {{ border-collapse: collapse; width: 100%; min-width: 900px; }}
+    .value-table th {{
+      padding: 12px 14px; text-align: left;
+      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600;
+      background: var(--panel-2); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; cursor: pointer;
+    }}
+    .value-table th:hover {{ color: var(--accent); }}
+    .value-table td {{
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      font-size: 13px; font-variant-numeric: tabular-nums;
+    }}
+    .value-table tr:hover td {{ background: rgba(6,182,212,0.03); }}
+    .value-table .edge-col {{
+      font-weight: 700; color: var(--green);
+    }}
+    .value-table .ev-col {{ font-weight: 600; color: var(--green); }}
+    .value-table .odds-col {{ font-weight: 600; }}
+    .value-table .stake-col {{ font-weight: 700; }}
+    .edge-bar {{
+      display: inline-block; height: 4px; border-radius: 2px;
+      background: var(--green); margin-left: 8px; vertical-align: middle;
+      min-width: 4px;
+    }}
+    .conf-dot {{
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    }}
+    .conf-high {{ background: var(--green); }}
+    .conf-med {{ background: var(--amber); }}
+    .conf-low {{ background: var(--red); }}
+
+    /* ---- BANKROLL METER ---- */
+    .bankroll-bar {{
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px;
+      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+      margin-bottom: 24px;
+    }}
+    .bankroll-bar .info {{ flex: 1; min-width: 200px; }}
+    .bankroll-bar .info .label {{
+      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 600;
+    }}
+    .bankroll-bar .info .amount {{ font-size: 20px; font-weight: 700; margin-top: 2px; }}
+    .meter {{ flex: 2; min-width: 200px; }}
+    .meter .meter-track {{
+      height: 10px; background: var(--panel-3); border-radius: 5px;
+      overflow: hidden; position: relative;
+    }}
+    .meter .meter-fill {{
+      height: 100%; border-radius: 5px; transition: width 0.4s ease;
+      background: linear-gradient(90deg, var(--green), var(--accent));
+    }}
+    .meter .meter-fill.warn {{ background: linear-gradient(90deg, var(--amber), var(--red)); }}
+    .meter .meter-labels {{
+      display: flex; justify-content: space-between; font-size: 11px;
+      color: var(--muted); margin-top: 4px;
+    }}
+
+    /* ---- EMPTY STATE ---- */
+    .empty {{
+      text-align: center; padding: 60px 20px; color: var(--muted);
+    }}
+    .empty .icon {{ font-size: 48px; margin-bottom: 12px; opacity: 0.5; }}
+    .empty h3 {{ color: var(--text-2); margin-bottom: 8px; }}
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 768px) {{
+      .app {{ padding: 0 12px 24px; }}
+      .header {{ flex-direction: column; align-items: flex-start; }}
+      .kpis {{ grid-template-columns: repeat(2, 1fr); }}
+      .games-grid {{ grid-template-columns: 1fr; }}
+      .kpi .kpi-value {{ font-size: 22px; }}
+      .controls {{ flex-direction: column; }}
+    }}
+
+    /* ---- FOOTER ---- */
+    .footer {{
+      text-align: center; padding: 24px; color: var(--muted);
+      font-size: 12px; border-top: 1px solid var(--border); margin-top: 16px;
+    }}
+    .footer code {{
+      background: var(--panel-2); padding: 2px 6px;
+      border-radius: 4px; border: 1px solid var(--border);
+    }}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="header">
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="logo">MP</div>
       <div>
         <h1>MoneyPuck Edge Intelligence</h1>
-        <div class="sub">Quiver-style signal dashboard for NHL opportunities • API endpoint <code>/api/opportunities</code></div>
+        <div class="sub">Multi-book NHL betting edge detection — Quebec</div>
       </div>
-      <div class="muted">Tip: add <code>?demo=1</code> for instant sample data</div>
     </div>
-
-    <div class="grid">
-      <div class="card"><div class="label">Opportunities</div><div class="value" id="stat-count">{len(rows)}</div></div>
-      <div class="card"><div class="label">Avg Edge (pp)</div><div class="value" id="stat-edge">{avg_edge:.2f}</div></div>
-      <div class="card"><div class="label">Avg EV / $1</div><div class="value" id="stat-ev">{avg_ev:.3f}</div></div>
-      <div class="card"><div class="label">Suggested Stake Total</div><div class="value" id="stat-stake">${sum(row['recommended_stake'] for row in rows):.2f}</div></div>
+    <div class="header-actions">
+      <div class="badge" id="mode-badge">DEMO</div>
+      <button class="btn" id="btn-refresh" onclick="refreshDashboard()">Refresh</button>
     </div>
+  </div>
 
-    <div class="controls">
-      <div class="control"><label>Region</label><select id="region"><option value="ca">CA</option><option value="us">US</option></select></div>
-      <div class="control"><label>Min Edge (pp)</label><input id="min_edge" type="number" step="0.1" value="2.0"></div>
-      <div class="control"><label>Min EV</label><input id="min_ev" type="number" step="0.01" value="0.02"></div>
-      <div class="control"><label>Bankroll</label><input id="bankroll" type="number" step="100" value="1000"></div>
-      <div class="control"><label>Season</label><input id="season" type="number" value="2024"></div>
-      <div class="btns"><button id="refresh">Refresh</button><button class="secondary" id="demo">Demo Data</button></div>
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="control-group">
+      <label>Region</label>
+      <select id="ctl-region">
+        <option value="qc" selected>Quebec</option>
+        <option value="on">Ontario</option>
+        <option value="ca">Canada</option>
+        <option value="us">US</option>
+      </select>
     </div>
+    <div class="control-group">
+      <label>Bankroll</label>
+      <input id="ctl-bankroll" type="number" step="100" value="1000">
+    </div>
+    <div class="control-group">
+      <label>Min Edge</label>
+      <input id="ctl-min-edge" type="number" step="0.5" value="2.0">
+    </div>
+    <div class="control-group">
+      <label>Min EV</label>
+      <input id="ctl-min-ev" type="number" step="0.01" value="0.02">
+    </div>
+    <div class="control-group">
+      <label>Season</label>
+      <input id="ctl-season" type="number" value="2024">
+    </div>
+    <button class="btn btn-ghost" onclick="refreshDashboard(true)">Demo Data</button>
+  </div>
 
-    <div class="table-wrap">
-      <table>
+  <!-- BOOK FILTER -->
+  <div class="books-bar" id="books-bar">
+    <span class="label">Books</span>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Active Books</div><div class="kpi-value" id="kpi-books">0</div></div>
+    <div class="kpi"><div class="kpi-label">Games Tonight</div><div class="kpi-value" id="kpi-games">0</div></div>
+    <div class="kpi green"><div class="kpi-label">Value Bets</div><div class="kpi-value" id="kpi-bets">0</div></div>
+    <div class="kpi green"><div class="kpi-label">Avg Edge</div><div class="kpi-value" id="kpi-edge">0pp</div><div class="kpi-sub">probability points</div></div>
+    <div class="kpi"><div class="kpi-label">Best Edge</div><div class="kpi-value" id="kpi-best">0pp</div></div>
+    <div class="kpi"><div class="kpi-label">Total Stake</div><div class="kpi-value" id="kpi-stake">$0</div></div>
+  </div>
+
+  <!-- BANKROLL METER -->
+  <div class="bankroll-bar">
+    <div class="info">
+      <div class="label">Bankroll Exposure</div>
+      <div class="amount" id="bankroll-amount">$0 / $1,000</div>
+    </div>
+    <div class="meter">
+      <div class="meter-track"><div class="meter-fill" id="meter-fill" style="width:0%"></div></div>
+      <div class="meter-labels"><span>0%</span><span id="meter-pct">0%</span><span>Cap 15%</span></div>
+    </div>
+  </div>
+
+  <!-- GAMES -->
+  <div class="section-title">Tonight's Games <span class="count" id="games-count">0</span></div>
+  <div class="games-grid" id="games-grid"></div>
+
+  <!-- VALUE BETS -->
+  <div class="value-section">
+    <div class="section-title">Value Bets <span class="count" id="bets-count">0</span></div>
+    <div class="value-table-wrap">
+      <table class="value-table">
         <thead>
           <tr>
-            <th>Commence (UTC)</th><th>Matchup</th><th>Side</th><th>Book</th><th>Odds</th>
-            <th>Implied</th><th>Model</th><th>Edge (pp)</th><th>EV/$</th><th>Kelly</th><th>Conf</th><th>Stake</th>
+            <th onclick="sortBets('game')">#</th>
+            <th onclick="sortBets('game')">Game</th>
+            <th onclick="sortBets('side')">Pick</th>
+            <th onclick="sortBets('sportsbook')">Book</th>
+            <th onclick="sortBets('american_odds')">Odds</th>
+            <th onclick="sortBets('implied_probability')">Market %</th>
+            <th onclick="sortBets('model_probability')">Model %</th>
+            <th onclick="sortBets('edge_probability_points')">Edge</th>
+            <th onclick="sortBets('expected_value_per_dollar')">EV/$</th>
+            <th onclick="sortBets('confidence')">Conf</th>
+            <th onclick="sortBets('recommended_stake')">Stake</th>
           </tr>
         </thead>
-        <tbody id="rows"></tbody>
+        <tbody id="bets-body"></tbody>
       </table>
     </div>
   </div>
 
-  <script>
-    const initialRows = {initial_rows_json};
+  <div class="footer">
+    Model: 16-metric composite | Logistic win probability | Confidence-adj Kelly<br>
+    API: <code>/api/dashboard</code> | <code>/api/opportunities</code>
+  </div>
+</div>
 
-    function pct(v) {{ return `${{(Number(v) * 100).toFixed(1)}}%`; }}
-    function n(v, d=2) {{ return Number(v).toFixed(d); }}
+<script>
+const D = {data_json};
+let activeBooks = new Set((D.books || []).map(b => b));
+let currentData = D;
+let sortKey = 'edge_probability_points';
+let sortDesc = true;
 
-    function renderRows(rows) {{
-      const body = document.getElementById('rows');
-      if (!rows.length) {{
-        body.innerHTML = `<tr><td colspan="12" class="muted">No opportunities found for current filters.</td></tr>`;
-      }} else {{
-        body.innerHTML = rows.map((r) => `
-          <tr>
-            <td>${{r.commence_time_utc}}</td>
-            <td>${{r.away_team}} @ ${{r.home_team}}</td>
-            <td>${{r.side}}</td>
-            <td>${{r.sportsbook}}</td>
-            <td>${{r.american_odds > 0 ? '+' : ''}}${{r.american_odds}}</td>
-            <td>${{pct(r.implied_probability)}}</td>
-            <td>${{pct(r.model_probability)}}</td>
-            <td class="good">${{n(r.edge_probability_points,2)}}</td>
-            <td class="good">${{n(r.expected_value_per_dollar,3)}}</td>
-            <td>${{n(r.kelly_fraction,3)}}</td>
-            <td>${{pct(r.confidence || 0)}}</td>
-            <td>${{n(r.recommended_stake,2)}}</td>
-          </tr>
-        `).join('');
-      }}
+function init() {{
+  renderBooks(D.books || []);
+  render(D);
+}}
 
-      const avgEdge = rows.length ? rows.reduce((a, r) => a + Number(r.edge_probability_points), 0) / rows.length : 0;
-      const avgEv = rows.length ? rows.reduce((a, r) => a + Number(r.expected_value_per_dollar), 0) / rows.length : 0;
-      const totalStake = rows.reduce((a, r) => a + Number(r.recommended_stake), 0);
-      document.getElementById('stat-count').innerText = rows.length;
-      document.getElementById('stat-edge').innerText = n(avgEdge, 2);
-      document.getElementById('stat-ev').innerText = n(avgEv, 3);
-      document.getElementById('stat-stake').innerText = `$${{n(totalStake, 2)}}`;
-    }}
+function renderBooks(books) {{
+  const bar = document.getElementById('books-bar');
+  bar.innerHTML = '<span class="label">Books</span>';
+  books.forEach(b => {{
+    const chip = document.createElement('div');
+    chip.className = 'book-chip' + (activeBooks.has(b) ? ' active' : '');
+    chip.textContent = b;
+    chip.onclick = () => {{
+      if (activeBooks.has(b)) activeBooks.delete(b); else activeBooks.add(b);
+      chip.classList.toggle('active');
+      render(currentData);
+    }};
+    bar.appendChild(chip);
+  }});
+}}
 
-    async function refresh(useDemo=false) {{
-      const query = new URLSearchParams({{
-        region: document.getElementById('region').value,
-        min_edge: document.getElementById('min_edge').value,
-        min_ev: document.getElementById('min_ev').value,
-        bankroll: document.getElementById('bankroll').value,
-        season: document.getElementById('season').value,
-      }});
-      if (useDemo) query.set('demo', '1');
-      const res = await fetch(`/api/opportunities?${{query.toString()}}`);
-      const payload = await res.json();
-      if (!res.ok) {{
-        alert(payload.error || 'Request failed');
-        return;
-      }}
-      renderRows(payload);
-    }}
+function fmtOdds(n) {{ return n > 0 ? '+' + n : '' + n; }}
+function pct(v) {{ return (v * 100).toFixed(1) + '%'; }}
+function n(v, d) {{ return Number(v).toFixed(d || 2); }}
 
-    document.getElementById('refresh').addEventListener('click', () => refresh(false));
-    document.getElementById('demo').addEventListener('click', () => refresh(true));
-    renderRows(initialRows);
-  </script>
+function render(data) {{
+  currentData = data;
+  const games = data.games || [];
+  const bets = (data.value_bets || []).filter(b => activeBooks.has(b.sportsbook));
+  const summary = data.summary || {{}};
+  const bankroll = Number(document.getElementById('ctl-bankroll').value) || 1000;
+
+  // Filter game book odds by active books
+  const filteredGames = games.map(g => ({{
+    ...g,
+    books: (g.books || []).filter(b => activeBooks.has(b.name))
+  }}));
+
+  // KPIs
+  document.getElementById('kpi-books').textContent = activeBooks.size;
+  document.getElementById('kpi-games').textContent = games.length;
+  document.getElementById('kpi-bets').textContent = bets.length;
+  const avgEdge = bets.length ? bets.reduce((a,b) => a + b.edge_probability_points, 0) / bets.length : 0;
+  const bestEdge = bets.length ? Math.max(...bets.map(b => b.edge_probability_points)) : 0;
+  const totalStake = bets.reduce((a,b) => a + b.recommended_stake, 0);
+  document.getElementById('kpi-edge').textContent = '+' + n(avgEdge) + 'pp';
+  document.getElementById('kpi-best').textContent = '+' + n(bestEdge) + 'pp';
+  document.getElementById('kpi-stake').textContent = '$' + n(totalStake);
+
+  // Mode badge
+  const badge = document.getElementById('mode-badge');
+  if (data.mode === 'live') {{
+    badge.className = 'badge live'; badge.textContent = 'LIVE';
+  }} else {{
+    badge.className = 'badge demo'; badge.textContent = 'DEMO';
+  }}
+
+  // Bankroll meter
+  const exposurePct = bankroll > 0 ? (totalStake / bankroll) * 100 : 0;
+  document.getElementById('bankroll-amount').textContent = '$' + n(totalStake) + ' / $' + bankroll.toLocaleString();
+  const fill = document.getElementById('meter-fill');
+  fill.style.width = Math.min(exposurePct, 100) + '%';
+  fill.className = 'meter-fill' + (exposurePct > 15 ? ' warn' : '');
+  document.getElementById('meter-pct').textContent = n(exposurePct, 1) + '%';
+
+  // Games
+  document.getElementById('games-count').textContent = filteredGames.length;
+  const grid = document.getElementById('games-grid');
+  if (!filteredGames.length) {{
+    grid.innerHTML = '<div class="empty"><div class="icon">&#127954;</div><h3>No games loaded</h3><p>Click Refresh or Demo Data to load games</p></div>';
+  }} else {{
+    grid.innerHTML = filteredGames.map(g => renderGameCard(g, bets)).join('');
+  }}
+
+  // Value bets
+  document.getElementById('bets-count').textContent = bets.length;
+  renderBets(bets);
+}}
+
+function renderGameCard(g, bets) {{
+  const hasValue = bets.some(b => (b.home_team === g.home && b.away_team === g.away) || (b.home_team === g.away && b.away_team === g.home));
+  const hp = (g.home_prob * 100).toFixed(1);
+  const ap = (g.away_prob * 100).toFixed(1);
+  const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit'}}) : '';
+
+  let booksHtml = '';
+  if (g.books && g.books.length) {{
+    const bestHomeOdds = Math.max(...g.books.map(b => b.home_odds || -9999));
+    const bestAwayOdds = Math.max(...g.books.map(b => b.away_odds || -9999));
+    booksHtml = `
+      <div class="book-odds">
+        <table>
+          <tr><th>Book</th><th>${{g.home}} ML</th><th>${{g.away}} ML</th><th>Edge</th></tr>
+          ${{g.books.map(b => {{
+            const homeEdge = b.home_edge || 0;
+            const awayEdge = b.away_edge || 0;
+            const bestEdge = Math.max(homeEdge, awayEdge);
+            const isBestHome = b.home_odds === bestHomeOdds;
+            const isBestAway = b.away_odds === bestAwayOdds;
+            return `<tr>
+              <td class="book-name">${{b.name}}</td>
+              <td class="odds ${{isBestHome ? 'best-line' : ''}}">${{fmtOdds(b.home_odds)}}</td>
+              <td class="odds ${{isBestAway ? 'best-line' : ''}}">${{fmtOdds(b.away_odds)}}</td>
+              <td class="${{bestEdge > 0 ? 'edge-positive' : 'edge-negative'}}">
+                ${{bestEdge > 0 ? '+' + n(bestEdge) + 'pp' : '-'}}
+                ${{bestEdge >= 2 ? '<span class="value-badge">VALUE</span>' : ''}}
+              </td>
+            </tr>`;
+          }}).join('')}}
+        </table>
+      </div>`;
+  }} else {{
+    booksHtml = '<div style="padding:14px 18px;color:var(--muted);font-size:12px;">No book odds available</div>';
+  }}
+
+  return `
+    <div class="game-card ${{hasValue ? 'has-value' : ''}}">
+      <div class="game-header">
+        <div class="game-matchup">
+          <span class="team-badge">${{g.away}}</span>
+          <span class="vs">@</span>
+          <span class="team-badge">${{g.home}}</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          ${{hasValue ? '<span class="game-value-tag">VALUE</span>' : ''}}
+          <span class="game-time">${{time}}</span>
+        </div>
+      </div>
+      <div class="prob-bar-wrap">
+        <div class="prob-labels">
+          <div><span class="team">${{g.away}}</span> <span class="pct">${{ap}}%</span></div>
+          <div><span class="pct">${{hp}}%</span> <span class="team">${{g.home}}</span></div>
+        </div>
+        <div class="prob-bar"><div class="fill" style="width:${{hp}}%"></div></div>
+      </div>
+      ${{booksHtml}}
+    </div>`;
+}}
+
+function renderBets(bets) {{
+  const body = document.getElementById('bets-body');
+  const sorted = [...bets].sort((a,b) => {{
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === 'game') {{ av = a.away_team + a.home_team; bv = b.away_team + b.home_team; }}
+    if (typeof av === 'string') return sortDesc ? bv.localeCompare(av) : av.localeCompare(bv);
+    return sortDesc ? bv - av : av - bv;
+  }});
+  if (!sorted.length) {{
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--muted);">No value bets found at current thresholds</td></tr>';
+    return;
+  }}
+  body.innerHTML = sorted.map((b, i) => {{
+    const game = b.away_team + ' @ ' + b.home_team;
+    const edgeW = Math.min(b.edge_probability_points * 4, 80);
+    const conf = b.confidence || 0;
+    const confClass = conf >= 0.7 ? 'conf-high' : conf >= 0.4 ? 'conf-med' : 'conf-low';
+    return `<tr>
+      <td>${{i+1}}</td>
+      <td>${{game}}</td>
+      <td style="font-weight:700">${{b.side}}</td>
+      <td>${{b.sportsbook}}</td>
+      <td class="odds-col">${{b.american_odds > 0 ? '+' : ''}}${{b.american_odds}}</td>
+      <td>${{pct(b.implied_probability)}}</td>
+      <td style="font-weight:600">${{pct(b.model_probability)}}</td>
+      <td class="edge-col">+${{n(b.edge_probability_points)}}pp <span class="edge-bar" style="width:${{edgeW}}px"></span></td>
+      <td class="ev-col">${{n(b.expected_value_per_dollar, 3)}}</td>
+      <td><span class="conf-dot ${{confClass}}"></span> ${{pct(conf)}}</td>
+      <td class="stake-col">$${{n(b.recommended_stake)}}</td>
+    </tr>`;
+  }}).join('');
+}}
+
+function sortBets(key) {{
+  if (sortKey === key) sortDesc = !sortDesc;
+  else {{ sortKey = key; sortDesc = true; }}
+  render(currentData);
+}}
+
+async function refreshDashboard(demo) {{
+  const btn = document.getElementById('btn-refresh');
+  btn.textContent = 'Loading...'; btn.disabled = true;
+  try {{
+    const params = new URLSearchParams({{
+      region: document.getElementById('ctl-region').value,
+      bankroll: document.getElementById('ctl-bankroll').value,
+      min_edge: document.getElementById('ctl-min-edge').value,
+      min_ev: document.getElementById('ctl-min-ev').value,
+      season: document.getElementById('ctl-season').value,
+    }});
+    if (demo) params.set('demo', '1');
+    const res = await fetch('/api/dashboard?' + params.toString());
+    const data = await res.json();
+    if (!res.ok) {{ alert(data.error || 'Request failed'); return; }}
+    activeBooks = new Set(data.books || []);
+    renderBooks(data.books || []);
+    render(data);
+  }} catch(e) {{
+    alert('Network error: ' + e.message);
+  }} finally {{
+    btn.textContent = 'Refresh'; btn.disabled = false;
+  }}
+}}
+
+init();
+</script>
 </body>
-</html>
-"""
+</html>"""
