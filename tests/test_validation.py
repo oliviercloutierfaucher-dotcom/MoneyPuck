@@ -175,4 +175,4 @@ def test_roi_summary_known_values():
     assert abs(summary["total_staked"] - 100.0) < 1e-6
     assert abs(summary["total_pnl"] - 7.0) < 1e-6
     assert abs(summary["roi_pct"] - 7.0) < 1e-4
-    assert abs(summary["win_rate"] - 1 / 3) < 1e-3
+    assert abs(summary["win_rate"] - 1 / 3) < 1e-6
