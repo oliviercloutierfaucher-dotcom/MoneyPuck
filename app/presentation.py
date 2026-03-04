@@ -230,9 +230,9 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .game-card {{
       background: var(--panel); border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s; cursor: pointer;
     }}
-    .game-card:hover {{ border-color: var(--border-2); }}
+    .game-card:hover {{ border-color: var(--accent); }}
     .game-card.has-value {{ border-color: var(--green-border); }}
     .game-header {{
       display: flex; justify-content: space-between; align-items: center;
@@ -383,6 +383,136 @@ def render_dashboard(data: dict[str, Any]) -> str:
       .controls {{ flex-direction: column; }}
     }}
 
+    /* ---- PLAYS CARDS ---- */
+    .plays-grid {{
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 14px; margin-bottom: 32px;
+    }}
+    .play-card {{
+      background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(6,182,212,0.05));
+      border: 1px solid var(--green-border);
+      border-radius: var(--radius); padding: 18px; position: relative;
+    }}
+    .play-card .play-num {{
+      position: absolute; top: 14px; right: 16px;
+      background: var(--green); color: #041109; width: 28px; height: 28px;
+      border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 13px; font-weight: 800;
+    }}
+    .play-card .play-action {{
+      font-size: 18px; font-weight: 800; color: var(--green);
+      margin-bottom: 6px;
+    }}
+    .play-card .play-game {{
+      color: var(--muted); font-size: 13px; margin-bottom: 10px;
+    }}
+    .play-details {{
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px; font-size: 12px;
+    }}
+    .play-details .detail-label {{ color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }}
+    .play-details .detail-value {{ font-weight: 700; font-size: 15px; margin-top: 2px; }}
+    .play-details .detail-value.green {{ color: var(--green); }}
+
+    /* ---- ARB CARDS ---- */
+    .arb-grid {{
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 14px; margin-bottom: 32px;
+    }}
+    .arb-card {{
+      background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.04));
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: var(--radius); padding: 18px; position: relative;
+    }}
+    .arb-card .arb-title {{
+      font-size: 15px; font-weight: 800; color: var(--amber); margin-bottom: 4px;
+    }}
+    .arb-card .arb-game {{
+      color: var(--muted); font-size: 12px; margin-bottom: 12px;
+    }}
+    .arb-leg {{
+      display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+      background: rgba(245,158,11,0.05); border-radius: var(--radius-sm);
+      margin-bottom: 6px; font-size: 13px;
+    }}
+    .arb-leg .leg-side {{ font-weight: 700; min-width: 80px; }}
+    .arb-leg .leg-book {{ color: var(--text-2); min-width: 90px; }}
+    .arb-leg .leg-odds {{ font-weight: 700; color: var(--amber); min-width: 50px; }}
+    .arb-leg .leg-stake {{ font-weight: 700; color: var(--green); margin-left: auto; }}
+    .arb-profit {{
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(245,158,11,0.15);
+      font-size: 13px;
+    }}
+    .arb-profit .profit-label {{ color: var(--muted); }}
+    .arb-profit .profit-value {{ font-weight: 800; color: var(--green); font-size: 16px; }}
+
+    /* ---- MODAL ---- */
+    .modal-backdrop {{
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+      justify-content: center; align-items: flex-start;
+      padding: 40px 20px; overflow-y: auto;
+    }}
+    .modal-backdrop.open {{ display: flex; }}
+    .modal-content {{
+      background: var(--bg-2); border: 1px solid var(--border-2);
+      border-radius: var(--radius); max-width: 720px; width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6); position: relative;
+    }}
+    .modal-close {{
+      position: absolute; top: 14px; right: 16px; background: none;
+      border: none; color: var(--muted); font-size: 22px; cursor: pointer;
+      width: 32px; height: 32px; display: flex; align-items: center;
+      justify-content: center; border-radius: 6px; transition: all 0.15s;
+    }}
+    .modal-close:hover {{ background: var(--panel-3); color: var(--text); }}
+    .modal-header {{
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }}
+    .modal-header .modal-matchup {{
+      font-size: 20px; font-weight: 800; display: flex;
+      align-items: center; gap: 12px; margin-bottom: 12px;
+    }}
+    .modal-section {{
+      padding: 16px 24px; border-bottom: 1px solid var(--border);
+    }}
+    .modal-section:last-child {{ border-bottom: none; }}
+    .modal-section h3 {{
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px;
+    }}
+    .modal-section table {{ width: 100%; border-collapse: collapse; }}
+    .modal-section th {{
+      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600; padding: 6px 0;
+      text-align: left; border-bottom: 1px solid var(--border);
+    }}
+    .modal-section td {{
+      padding: 7px 0; font-size: 13px; font-variant-numeric: tabular-nums;
+      border-bottom: 1px solid rgba(30,41,59,0.5);
+    }}
+    .modal-section tr:last-child td {{ border-bottom: none; }}
+    .top-bets {{
+      background: var(--green-bg); border: 1px solid var(--green-border);
+      border-radius: var(--radius-sm); padding: 14px 16px;
+    }}
+    .top-bet-row {{
+      display: flex; align-items: center; gap: 10px; padding: 6px 0;
+      font-size: 13px;
+    }}
+    .top-bet-row .rank {{
+      background: var(--green); color: #041109; width: 22px; height: 22px;
+      border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0;
+    }}
+    .top-bet-row .bet-desc {{ font-weight: 700; }}
+    .top-bet-row .bet-meta {{ color: var(--muted); font-size: 12px; margin-left: auto; }}
+    .muted {{ color: var(--muted); }}
+    .best-star {{ color: var(--green); font-weight: 700; }}
+    .arb-badge {{ color: var(--amber); font-weight: 700; font-size: 11px; }}
+    .no-arb {{ color: var(--muted); font-size: 12px; padding: 8px 0; }}
+
     /* ---- FOOTER ---- */
     .footer {{
       text-align: center; padding: 24px; color: var(--muted);
@@ -469,13 +599,21 @@ def render_dashboard(data: dict[str, Any]) -> str:
     </div>
   </div>
 
+  <!-- TODAY'S PLAYS (clear action items) -->
+  <div class="section-title" id="plays-title">Today's Plays <span class="count" id="plays-count">0</span></div>
+  <div class="plays-grid" id="plays-grid"></div>
+
+  <!-- ARB ALERTS -->
+  <div class="section-title">Arb Alerts <span class="count" id="arb-count">0</span></div>
+  <div class="arb-grid" id="arb-grid"></div>
+
   <!-- GAMES -->
-  <div class="section-title">Tonight's Games <span class="count" id="games-count">0</span></div>
+  <div class="section-title">Tonight's Games — click for details <span class="count" id="games-count">0</span></div>
   <div class="games-grid" id="games-grid"></div>
 
-  <!-- VALUE BETS -->
+  <!-- VALUE BETS (detailed table) -->
   <div class="value-section">
-    <div class="section-title">Value Bets <span class="count" id="bets-count">0</span></div>
+    <div class="section-title">Detailed Breakdown <span class="count" id="bets-count">0</span></div>
     <div class="value-table-wrap">
       <table class="value-table">
         <thead>
@@ -484,7 +622,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
             <th onclick="sortBets('game')">Game</th>
             <th onclick="sortBets('side')">Pick</th>
             <th onclick="sortBets('sportsbook')">Book</th>
-            <th onclick="sortBets('american_odds')">Odds</th>
+            <th onclick="sortBets('decimal_odds')">Odds</th>
             <th onclick="sortBets('implied_probability')">Market %</th>
             <th onclick="sortBets('model_probability')">Model %</th>
             <th onclick="sortBets('edge_probability_points')">Edge</th>
@@ -504,16 +642,23 @@ def render_dashboard(data: dict[str, Any]) -> str:
   </div>
 </div>
 
+<!-- GAME DETAIL MODAL -->
+<div class="modal-backdrop" id="game-modal" onclick="if(event.target===this)closeGameModal()">
+  <div class="modal-content" id="modal-body"></div>
+</div>
+
 <script>
 const D = {data_json};
 let activeBooks = new Set((D.books || []).map(b => b));
 let currentData = D;
+let currentFilteredGames = [];
 let sortKey = 'edge_probability_points';
 let sortDesc = true;
 
 function init() {{
   renderBooks(D.books || []);
   render(D);
+  document.addEventListener('keydown', e => {{ if (e.key === 'Escape') closeGameModal(); }});
 }}
 
 function renderBooks(books) {{
@@ -532,7 +677,7 @@ function renderBooks(books) {{
   }});
 }}
 
-function fmtOdds(n) {{ return n > 0 ? '+' + n : '' + n; }}
+function dec(am) {{ return am > 0 ? (am/100 + 1).toFixed(2) : (100/Math.abs(am) + 1).toFixed(2); }}
 function pct(v) {{ return (v * 100).toFixed(1) + '%'; }}
 function n(v, d) {{ return Number(v).toFixed(d || 2); }}
 
@@ -540,11 +685,11 @@ function render(data) {{
   currentData = data;
   const games = data.games || [];
   const bets = (data.value_bets || []).filter(b => activeBooks.has(b.sportsbook));
-  const summary = data.summary || {{}};
+  const arbs = (data.arb_opportunities || []).filter(a => activeBooks.has(a.side_a_book) && activeBooks.has(a.side_b_book));
   const bankroll = Number(document.getElementById('ctl-bankroll').value) || 1000;
 
   // Filter game book odds by active books
-  const filteredGames = games.map(g => ({{
+  currentFilteredGames = games.map(g => ({{
     ...g,
     books: (g.books || []).filter(b => activeBooks.has(b.name))
   }}));
@@ -576,58 +721,110 @@ function render(data) {{
   fill.className = 'meter-fill' + (exposurePct > 15 ? ' warn' : '');
   document.getElementById('meter-pct').textContent = n(exposurePct, 1) + '%';
 
-  // Games
-  document.getElementById('games-count').textContent = filteredGames.length;
+  // Plays
+  document.getElementById('plays-count').textContent = bets.length;
+  renderPlays(bets);
+
+  // Arbs
+  document.getElementById('arb-count').textContent = arbs.length;
+  renderArbs(arbs);
+
+  // Games (simplified clickable cards)
+  document.getElementById('games-count').textContent = currentFilteredGames.length;
   const grid = document.getElementById('games-grid');
-  if (!filteredGames.length) {{
+  if (!currentFilteredGames.length) {{
     grid.innerHTML = '<div class="empty"><div class="icon">&#127954;</div><h3>No games loaded</h3><p>Click Refresh or Demo Data to load games</p></div>';
   }} else {{
-    grid.innerHTML = filteredGames.map(g => renderGameCard(g, bets)).join('');
+    grid.innerHTML = currentFilteredGames.map((g, i) => renderGameCard(g, bets, i)).join('');
   }}
 
-  // Value bets
+  // Value bets table
   document.getElementById('bets-count').textContent = bets.length;
   renderBets(bets);
 }}
 
-function renderGameCard(g, bets) {{
+/* ---- TODAY'S PLAYS (decimal only) ---- */
+function renderPlays(bets) {{
+  const grid = document.getElementById('plays-grid');
+  if (!bets.length) {{
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:30px"><h3>No plays found</h3><p>Adjust thresholds or check back later</p></div>';
+    return;
+  }}
+  grid.innerHTML = bets.slice(0, 8).map((b, i) => {{
+    const game = b.away_team + ' @ ' + b.home_team;
+    const odds = b.decimal_odds || dec(b.american_odds);
+    return `
+      <div class="play-card">
+        <div class="play-num">${{i+1}}</div>
+        <div class="play-action">BET ${{b.side}} ${{b.market || 'ML'}}</div>
+        <div class="play-game">${{game}}</div>
+        <div class="play-details">
+          <div><div class="detail-label">Book</div><div class="detail-value">${{b.sportsbook}}</div></div>
+          <div><div class="detail-label">Odds</div><div class="detail-value">${{odds}}</div></div>
+          <div><div class="detail-label">Stake</div><div class="detail-value green">$${{n(b.recommended_stake)}}</div></div>
+          <div><div class="detail-label">Edge</div><div class="detail-value green">+${{n(b.edge_probability_points)}}pp</div></div>
+          <div><div class="detail-label">Model</div><div class="detail-value">${{pct(b.model_probability)}}</div></div>
+          <div><div class="detail-label">EV/$1</div><div class="detail-value green">${{n(b.expected_value_per_dollar, 3)}}</div></div>
+        </div>
+      </div>`;
+  }}).join('');
+}}
+
+/* ---- ARB ALERTS ---- */
+function renderArbs(arbs) {{
+  const grid = document.getElementById('arb-grid');
+  if (!arbs.length) {{
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:20px;font-size:13px"><p>No arbitrage opportunities found — lines are tight</p></div>';
+    return;
+  }}
+  grid.innerHTML = arbs.map(a => {{
+    const game = a.away_team + ' @ ' + a.home_team;
+    return `
+      <div class="arb-card">
+        <div class="arb-title">ARB: ${{a.market}}</div>
+        <div class="arb-game">${{game}}</div>
+        <div class="arb-leg">
+          <span class="leg-side">${{a.side_a}}</span>
+          <span class="leg-book">${{a.side_a_book}}</span>
+          <span class="leg-odds">${{n(a.side_a_odds)}}</span>
+          <span class="leg-stake">$${{n(a.stake_a_pct)}}</span>
+        </div>
+        <div class="arb-leg">
+          <span class="leg-side">${{a.side_b}}</span>
+          <span class="leg-book">${{a.side_b_book}}</span>
+          <span class="leg-odds">${{n(a.side_b_odds)}}</span>
+          <span class="leg-stake">$${{n(a.stake_b_pct)}}</span>
+        </div>
+        <div class="arb-profit">
+          <span class="profit-label">Per $100 wagered</span>
+          <span class="profit-value">+$${{n(a.profit_pct, 2)}} (${{n(a.profit_pct, 1)}}%)</span>
+        </div>
+      </div>`;
+  }}).join('');
+}}
+
+/* ---- SIMPLIFIED GAME CARD (clickable preview) ---- */
+function renderGameCard(g, bets, idx) {{
   const hasValue = bets.some(b => (b.home_team === g.home && b.away_team === g.away) || (b.home_team === g.away && b.away_team === g.home));
   const hp = (g.home_prob * 100).toFixed(1);
   const ap = (g.away_prob * 100).toFixed(1);
-  const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit'}}) : '';
+  const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit', timeZone:'America/New_York'}}) + ' ET' : '';
 
-  let booksHtml = '';
+  // Best ML line summary + Polymarket
+  let bestLine = '';
   if (g.books && g.books.length) {{
-    const bestHomeOdds = Math.max(...g.books.map(b => b.home_odds || -9999));
-    const bestAwayOdds = Math.max(...g.books.map(b => b.away_odds || -9999));
-    booksHtml = `
-      <div class="book-odds">
-        <table>
-          <tr><th>Book</th><th>${{g.home}} ML</th><th>${{g.away}} ML</th><th>Edge</th></tr>
-          ${{g.books.map(b => {{
-            const homeEdge = b.home_edge || 0;
-            const awayEdge = b.away_edge || 0;
-            const bestEdge = Math.max(homeEdge, awayEdge);
-            const isBestHome = b.home_odds === bestHomeOdds;
-            const isBestAway = b.away_odds === bestAwayOdds;
-            return `<tr>
-              <td class="book-name">${{b.name}}</td>
-              <td class="odds ${{isBestHome ? 'best-line' : ''}}">${{fmtOdds(b.home_odds)}}</td>
-              <td class="odds ${{isBestAway ? 'best-line' : ''}}">${{fmtOdds(b.away_odds)}}</td>
-              <td class="${{bestEdge > 0 ? 'edge-positive' : 'edge-negative'}}">
-                ${{bestEdge > 0 ? '+' + n(bestEdge) + 'pp' : '-'}}
-                ${{bestEdge >= 2 ? '<span class="value-badge">VALUE</span>' : ''}}
-              </td>
-            </tr>`;
-          }}).join('')}}
-        </table>
-      </div>`;
-  }} else {{
-    booksHtml = '<div style="padding:14px 18px;color:var(--muted);font-size:12px;">No book odds available</div>';
+    const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
+    const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
+    const polyLine = g.poly_home_prob ? ` &middot; <span style="color:var(--amber)">Poly: ${{g.home}} ${{pct(g.poly_home_prob)}}</span>` : '';
+    bestLine = `<div style="padding:8px 18px 14px;font-size:12px;color:var(--text-2)">
+      Best ML: <strong>${{g.home}} ${{dec(bestH)}}</strong> &middot;
+      <strong>${{g.away}} ${{dec(bestA)}}</strong>
+      &middot; ${{g.books.length}} books${{polyLine}}
+    </div>`;
   }}
 
   return `
-    <div class="game-card ${{hasValue ? 'has-value' : ''}}">
+    <div class="game-card ${{hasValue ? 'has-value' : ''}}" onclick="openGameModal(${{idx}})">
       <div class="game-header">
         <div class="game-matchup">
           <span class="team-badge">${{g.away}}</span>
@@ -646,10 +843,212 @@ function renderGameCard(g, bets) {{
         </div>
         <div class="prob-bar"><div class="fill" style="width:${{hp}}%"></div></div>
       </div>
-      ${{booksHtml}}
+      ${{bestLine}}
     </div>`;
 }}
 
+/* ---- GAME DETAIL MODAL ---- */
+function openGameModal(idx) {{
+  const g = currentFilteredGames[idx];
+  if (!g) return;
+  const hp = (g.home_prob * 100).toFixed(1);
+  const ap = (g.away_prob * 100).toFixed(1);
+  const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit', timeZone:'America/New_York'}}) + ' ET' : '';
+  const arbs = (currentData.arb_opportunities || []).filter(a => a.home_team === g.home && a.away_team === g.away);
+
+  // ---- TOP 3 BETS (by EV) across all markets + books ----
+  let allBets = [];
+  if (g.books) {{
+    g.books.forEach(b => {{
+      // ML bets
+      const hDec = parseFloat(dec(b.home_odds));
+      const aDec = parseFloat(dec(b.away_odds));
+      const hImp = b.home_implied || 0;
+      const aImp = b.away_implied || 0;
+      const hEv = g.home_prob * (hDec - 1) - (1 - g.home_prob);
+      const aEv = g.away_prob * (aDec - 1) - (1 - g.away_prob);
+      if (hEv > 0) allBets.push({{ side: g.home, market: 'ML', book: b.name, odds: hDec, ev: hEv, edge: b.home_edge || 0 }});
+      if (aEv > 0) allBets.push({{ side: g.away, market: 'ML', book: b.name, odds: aDec, ev: aEv, edge: b.away_edge || 0 }});
+      // Spread bets (informational — no model edge)
+      if (b.home_spread_odds) {{
+        const sDec = parseFloat(dec(b.home_spread_odds));
+        allBets.push({{ side: g.home + ' ' + (b.home_spread || -1.5), market: 'Spread', book: b.name, odds: sDec, ev: 0, edge: 0 }});
+      }}
+      if (b.away_spread_odds) {{
+        const sDec = parseFloat(dec(b.away_spread_odds));
+        allBets.push({{ side: g.away + ' ' + (b.away_spread || 1.5), market: 'Spread', book: b.name, odds: sDec, ev: 0, edge: 0 }});
+      }}
+    }});
+  }}
+  allBets.sort((a, b) => b.ev - a.ev);
+  const top3 = allBets.filter(b => b.ev > 0).slice(0, 3);
+
+  let top3Html = '';
+  if (top3.length) {{
+    top3Html = `<div class="top-bets">
+      ${{top3.map((b, i) => `<div class="top-bet-row">
+        <span class="rank">${{i+1}}</span>
+        <span class="bet-desc">${{b.side}} ${{b.market}} @ ${{b.book}}</span>
+        <span class="bet-meta">${{n(b.odds)}} &middot; EV +${{n(b.ev, 3)}} &middot; Edge +${{n(b.edge)}}pp</span>
+      </div>`).join('')}}
+    </div>`;
+  }} else {{
+    top3Html = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No positive EV bets found for this game</div>';
+  }}
+
+  // ---- MONEYLINE TABLE ----
+  let mlHtml = '';
+  if (g.books && g.books.length) {{
+    const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
+    const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
+    mlHtml = `<table>
+      <tr><th>Book</th><th>${{g.home}}</th><th>${{g.away}}</th><th>Edge</th></tr>
+      ${{g.books.map(b => {{
+        const hE = b.home_edge || 0, aE = b.away_edge || 0;
+        const best = Math.max(hE, aE);
+        return `<tr>
+          <td style="font-weight:600;color:var(--text-2)">${{b.name}}</td>
+          <td class="odds">${{b.home_odds === bestH ? '<span class="best-star">' : ''}}\
+${{dec(b.home_odds)}}${{b.home_odds === bestH ? ' &#9733;</span>' : ''}}</td>
+          <td class="odds">${{b.away_odds === bestA ? '<span class="best-star">' : ''}}\
+${{dec(b.away_odds)}}${{b.away_odds === bestA ? ' &#9733;</span>' : ''}}</td>
+          <td class="${{best > 0 ? 'edge-positive' : 'edge-negative'}}">
+            ${{best > 0 ? '+' + n(best) + 'pp' : '-'}}
+            ${{best >= 2 ? '<span class="value-badge">VALUE</span>' : ''}}
+          </td>
+        </tr>`;
+      }}).join('')}}</table>`;
+  }}
+
+  // ---- SPREAD TABLE ----
+  let spreadHtml = '';
+  const sb = (g.books || []).filter(b => b.home_spread_odds);
+  if (sb.length) {{
+    const spread = sb[0].home_spread || -1.5;
+    const bestHS = Math.max(...sb.map(b => b.home_spread_odds || -9999));
+    const bestAS = Math.max(...sb.map(b => b.away_spread_odds || -9999));
+    spreadHtml = `<table>
+      <tr><th>Book</th><th>${{g.home}} ${{spread}}</th><th>${{g.away}} ${{-spread}}</th></tr>
+      ${{sb.map(b => `<tr>
+        <td style="font-weight:600;color:var(--text-2)">${{b.name}}</td>
+        <td class="odds">${{b.home_spread_odds === bestHS ? '<span class="best-star">' : ''}}\
+${{dec(b.home_spread_odds)}}${{b.home_spread_odds === bestHS ? ' &#9733;</span>' : ''}}</td>
+        <td class="odds">${{b.away_spread_odds === bestAS ? '<span class="best-star">' : ''}}\
+${{dec(b.away_spread_odds)}}${{b.away_spread_odds === bestAS ? ' &#9733;</span>' : ''}}</td>
+      </tr>`).join('')}}</table>`;
+  }}
+
+  // ---- TOTALS TABLE ----
+  let totalHtml = '';
+  const tb = (g.books || []).filter(b => b.over_odds);
+  if (tb.length) {{
+    const line = tb[0].total_line || 5.5;
+    const bestO = Math.max(...tb.map(b => b.over_odds || -9999));
+    const bestU = Math.max(...tb.map(b => b.under_odds || -9999));
+    totalHtml = `<table>
+      <tr><th>Book</th><th>Over ${{line}}</th><th>Under ${{line}}</th></tr>
+      ${{tb.map(b => `<tr>
+        <td style="font-weight:600;color:var(--text-2)">${{b.name}}</td>
+        <td class="odds">${{b.over_odds === bestO ? '<span class="best-star">' : ''}}\
+${{dec(b.over_odds)}}${{b.over_odds === bestO ? ' &#9733;</span>' : ''}}</td>
+        <td class="odds">${{b.under_odds === bestU ? '<span class="best-star">' : ''}}\
+${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
+      </tr>`).join('')}}</table>`;
+  }}
+
+  // ---- ARB CHECK ----
+  let arbHtml = '';
+  if (arbs.length) {{
+    arbHtml = arbs.map(a => `<div class="arb-badge">ARB: ${{a.market}} — ${{a.side_a}} @ ${{a.side_a_book}} (${{n(a.side_a_odds)}}) vs ${{a.side_b}} @ ${{a.side_b_book}} (${{n(a.side_b_odds)}}) — +${{n(a.profit_pct)}}%</div>`).join('');
+  }} else {{
+    // Compute closest margin
+    let closest = 999;
+    if (g.books && g.books.length > 1) {{
+      const homeDecAll = g.books.map(b => parseFloat(dec(b.home_odds)));
+      const awayDecAll = g.books.map(b => parseFloat(dec(b.away_odds)));
+      const bestHD = Math.max(...homeDecAll);
+      const bestAD = Math.max(...awayDecAll);
+      closest = 1/bestHD + 1/bestAD;
+    }}
+    arbHtml = `<div class="no-arb">No arb on this game${{closest < 999 ? ' (margin: ' + n(closest, 3) + ')' : ''}}</div>`;
+  }}
+
+  // ---- POLYMARKET COMPARISON ----
+  let polyHtml = '';
+  if (g.poly_home_prob) {{
+    const pHP = pct(g.poly_home_prob);
+    const pAP = pct(g.poly_away_prob);
+    const modelDiffH = ((g.home_prob - g.poly_home_prob) * 100).toFixed(1);
+    const modelDiffA = ((g.away_prob - g.poly_away_prob) * 100).toFixed(1);
+    const diffColor = v => parseFloat(v) > 0 ? 'var(--green)' : parseFloat(v) < 0 ? 'var(--red)' : 'var(--muted)';
+    polyHtml = `<div class="modal-section">
+      <h3>Polymarket vs Model</h3>
+      <table>
+        <tr><th></th><th>${{g.home}}</th><th>${{g.away}}</th></tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-2)">Our Model</td>
+          <td style="font-weight:700">${{hp}}%</td>
+          <td style="font-weight:700">${{ap}}%</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--amber)">Polymarket</td>
+          <td>${{pHP}}</td>
+          <td>${{pAP}}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--muted)">Edge vs Poly</td>
+          <td style="font-weight:700;color:${{diffColor(modelDiffH)}}">${{modelDiffH > 0 ? '+' : ''}}${{modelDiffH}}pp</td>
+          <td style="font-weight:700;color:${{diffColor(modelDiffA)}}">${{modelDiffA > 0 ? '+' : ''}}${{modelDiffA}}pp</td>
+        </tr>
+      </table>
+    </div>`;
+  }}
+
+  // ---- BUILD MODAL ----
+  const modal = document.getElementById('game-modal');
+  document.getElementById('modal-body').innerHTML = `
+    <button class="modal-close" onclick="closeGameModal()">&times;</button>
+    <div class="modal-header">
+      <div class="modal-matchup">
+        <span class="team-badge">${{g.away}}</span>
+        <span class="vs">@</span>
+        <span class="team-badge">${{g.home}}</span>
+        <span style="margin-left:auto;color:var(--muted);font-size:13px">${{time}}</span>
+      </div>
+      <div class="prob-bar-wrap" style="padding:0;margin-top:8px">
+        <div class="prob-labels">
+          <div><span class="team">${{g.away}}</span> <span class="pct">${{ap}}%</span></div>
+          <div><span class="pct">${{hp}}%</span> <span class="team">${{g.home}}</span></div>
+        </div>
+        <div class="prob-bar"><div class="fill" style="width:${{hp}}%"></div></div>
+      </div>
+    </div>
+    ${{polyHtml}}
+    <div class="modal-section">
+      <h3>Top 3 Best Bets (by EV)</h3>
+      ${{top3Html}}
+    </div>
+    <div class="modal-section">
+      <h3>Moneyline</h3>
+      ${{mlHtml || '<div class="no-arb">No odds available</div>'}}
+    </div>
+    ${{spreadHtml ? `<div class="modal-section"><h3>Puck Line</h3>${{spreadHtml}}</div>` : ''}}
+    ${{totalHtml ? `<div class="modal-section"><h3>Over / Under</h3>${{totalHtml}}</div>` : ''}}
+    <div class="modal-section">
+      <h3>Arb Check</h3>
+      ${{arbHtml}}
+    </div>
+  `;
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}}
+
+function closeGameModal() {{
+  document.getElementById('game-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}}
+
+/* ---- VALUE BETS TABLE (decimal only) ---- */
 function renderBets(bets) {{
   const body = document.getElementById('bets-body');
   const sorted = [...bets].sort((a,b) => {{
@@ -667,12 +1066,13 @@ function renderBets(bets) {{
     const edgeW = Math.min(b.edge_probability_points * 4, 80);
     const conf = b.confidence || 0;
     const confClass = conf >= 0.7 ? 'conf-high' : conf >= 0.4 ? 'conf-med' : 'conf-low';
+    const odds = b.decimal_odds || dec(b.american_odds);
     return `<tr>
       <td>${{i+1}}</td>
       <td>${{game}}</td>
-      <td style="font-weight:700">${{b.side}}</td>
+      <td style="font-weight:700">${{b.side}} ${{b.market || 'ML'}}</td>
       <td>${{b.sportsbook}}</td>
-      <td class="odds-col">${{b.american_odds > 0 ? '+' : ''}}${{b.american_odds}}</td>
+      <td class="odds-col">${{odds}}</td>
       <td>${{pct(b.implied_probability)}}</td>
       <td style="font-weight:600">${{pct(b.model_probability)}}</td>
       <td class="edge-col">+${{n(b.edge_probability_points)}}pp <span class="edge-bar" style="width:${{edgeW}}px"></span></td>

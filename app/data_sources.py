@@ -73,6 +73,59 @@ def get_books_for_region(region: str) -> dict[str, str]:
     """Return bookmaker key -> display name mapping for a region."""
     return REGION_BOOK_PRESETS.get(region, QUEBEC_BOOKS)
 
+
+# ---------------------------------------------------------------------------
+# Odds API full team name → 3-letter code mapping
+# ---------------------------------------------------------------------------
+
+TEAM_NAME_TO_CODE: dict[str, str] = {
+    "Anaheim Ducks": "ANA",
+    "Boston Bruins": "BOS",
+    "Buffalo Sabres": "BUF",
+    "Calgary Flames": "CGY",
+    "Carolina Hurricanes": "CAR",
+    "Chicago Blackhawks": "CHI",
+    "Colorado Avalanche": "COL",
+    "Columbus Blue Jackets": "CBJ",
+    "Dallas Stars": "DAL",
+    "Detroit Red Wings": "DET",
+    "Edmonton Oilers": "EDM",
+    "Florida Panthers": "FLA",
+    "Los Angeles Kings": "LAK",
+    "Minnesota Wild": "MIN",
+    "Montreal Canadiens": "MTL",
+    "Montréal Canadiens": "MTL",
+    "Nashville Predators": "NSH",
+    "New Jersey Devils": "NJD",
+    "New York Islanders": "NYI",
+    "New York Rangers": "NYR",
+    "Ottawa Senators": "OTT",
+    "Philadelphia Flyers": "PHI",
+    "Pittsburgh Penguins": "PIT",
+    "San Jose Sharks": "SJS",
+    "Seattle Kraken": "SEA",
+    "St Louis Blues": "STL",
+    "St. Louis Blues": "STL",
+    "Tampa Bay Lightning": "TBL",
+    "Toronto Maple Leafs": "TOR",
+    "Utah Hockey Club": "UTA",
+    "Utah Mammoth": "UTA",
+    "Vancouver Canucks": "VAN",
+    "Vegas Golden Knights": "VGK",
+    "Washington Capitals": "WSH",
+    "Winnipeg Jets": "WPG",
+}
+
+TEAM_CODE_TO_NAME: dict[str, str] = {v: k for k, v in TEAM_NAME_TO_CODE.items()}
+
+
+def team_code(name_or_code: str) -> str:
+    """Convert a full team name or 3-letter code to a 3-letter code."""
+    if len(name_or_code) <= 3:
+        return name_or_code.upper()
+    return TEAM_NAME_TO_CODE.get(name_or_code, name_or_code)
+
+
 # All 32 NHL teams (2024-25 onward, UTA replaced ARI)
 NHL_TEAMS = [
     "ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL",
@@ -143,7 +196,7 @@ def fetch_odds(api_key: str, region: str, bookmakers: str | None) -> list[dict[s
     params = {
         "apiKey": api_key,
         "regions": region,
-        "markets": "h2h",
+        "markets": "h2h,spreads,totals",
         "oddsFormat": "american",
     }
     if bookmakers:
