@@ -283,7 +283,17 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
 
 
 def _detect_arbs(games: list[dict]) -> list[dict]:
-    """Detect arbitrage opportunities across books for all markets."""
+    """Detect arbitrage opportunities across books for all markets.
+
+    Limitations:
+    - Only checks same-market arbs (e.g. ML vs ML, spread vs spread).
+      Cross-market arbs (e.g. moneyline vs spread) are not detected.
+    - Client-side book filtering in the dashboard does not recalculate
+      arbs from the remaining books; it only hides arbs whose books
+      are deselected.
+    - Real-time execution risk: odds may change between detection and
+      bet placement.  Arbs shown here are informational, not guarantees.
+    """
     arbs = []
     for g in games:
         books = g.get("books", [])
@@ -322,59 +332,77 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
                 "stake_b_pct": round(stake_b, 2),
             })
 
-        # Spread arb
+        # Spread arb — only compare books offering the SAME spread line
         spread_books = [(b["name"], b) for b in books if b.get("home_spread_odds")]
         if len(spread_books) >= 2:
-            best_hs = max(spread_books, key=lambda x: american_to_decimal(x[1]["home_spread_odds"]))
-            best_as = max(spread_books, key=lambda x: american_to_decimal(x[1]["away_spread_odds"]))
-            hs_dec = american_to_decimal(best_hs[1]["home_spread_odds"])
-            as_dec = american_to_decimal(best_as[1]["away_spread_odds"])
-            sp_margin = 1 / hs_dec + 1 / as_dec
-            if sp_margin < 1.0:
-                profit = (1 / sp_margin - 1) * 100
-                sa = (1 / hs_dec) / (1 / hs_dec + 1 / as_dec) * 100
-                spread_val = best_hs[1].get("home_spread", -1.5)
-                arbs.append({
-                    "home_team": home, "away_team": away,
-                    "market": f"Spread {spread_val}",
-                    "side_a": f"{home} {spread_val}",
-                    "side_a_book": best_hs[0],
-                    "side_a_odds": round(hs_dec, 2),
-                    "side_b": f"{away} {-spread_val}",
-                    "side_b_book": best_as[0],
-                    "side_b_odds": round(as_dec, 2),
-                    "margin": round(sp_margin, 4),
-                    "profit_pct": round(profit, 2),
-                    "stake_a_pct": round(sa, 2),
-                    "stake_b_pct": round(100 - sa, 2),
-                })
+            # Group books by their home spread value so we only compare
+            # matching lines (e.g. -1.5 vs +1.5, not -1.5 vs -2.5)
+            from collections import defaultdict
+            spread_by_line: dict[float, list[tuple[str, dict]]] = defaultdict(list)
+            for name, bdata in spread_books:
+                line_val = bdata.get("home_spread", -1.5)
+                spread_by_line[line_val].append((name, bdata))
 
-        # Total arb
+            for spread_val, line_books in spread_by_line.items():
+                if len(line_books) < 2:
+                    continue
+                best_hs = max(line_books, key=lambda x: american_to_decimal(x[1]["home_spread_odds"]))
+                best_as = max(line_books, key=lambda x: american_to_decimal(x[1]["away_spread_odds"]))
+                hs_dec = american_to_decimal(best_hs[1]["home_spread_odds"])
+                as_dec = american_to_decimal(best_as[1]["away_spread_odds"])
+                sp_margin = 1 / hs_dec + 1 / as_dec
+                if sp_margin < 1.0:
+                    profit = (1 / sp_margin - 1) * 100
+                    sa = (1 / hs_dec) / (1 / hs_dec + 1 / as_dec) * 100
+                    arbs.append({
+                        "home_team": home, "away_team": away,
+                        "market": f"Spread {spread_val}",
+                        "side_a": f"{home} {spread_val}",
+                        "side_a_book": best_hs[0],
+                        "side_a_odds": round(hs_dec, 2),
+                        "side_b": f"{away} {-spread_val}",
+                        "side_b_book": best_as[0],
+                        "side_b_odds": round(as_dec, 2),
+                        "margin": round(sp_margin, 4),
+                        "profit_pct": round(profit, 2),
+                        "stake_a_pct": round(sa, 2),
+                        "stake_b_pct": round(100 - sa, 2),
+                    })
+
+        # Total arb — only compare books offering the SAME total line
         total_books = [(b["name"], b) for b in books if b.get("over_odds")]
         if len(total_books) >= 2:
-            best_over = max(total_books, key=lambda x: american_to_decimal(x[1]["over_odds"]))
-            best_under = max(total_books, key=lambda x: american_to_decimal(x[1]["under_odds"]))
-            o_dec = american_to_decimal(best_over[1]["over_odds"])
-            u_dec = american_to_decimal(best_under[1]["under_odds"])
-            t_margin = 1 / o_dec + 1 / u_dec
-            if t_margin < 1.0:
-                profit = (1 / t_margin - 1) * 100
-                sa = (1 / o_dec) / (1 / o_dec + 1 / u_dec) * 100
-                line = best_over[1].get("total_line", 5.5)
-                arbs.append({
-                    "home_team": home, "away_team": away,
-                    "market": f"Total {line}",
-                    "side_a": f"Over {line}",
-                    "side_a_book": best_over[0],
-                    "side_a_odds": round(o_dec, 2),
-                    "side_b": f"Under {line}",
-                    "side_b_book": best_under[0],
-                    "side_b_odds": round(u_dec, 2),
-                    "margin": round(t_margin, 4),
-                    "profit_pct": round(profit, 2),
-                    "stake_a_pct": round(sa, 2),
-                    "stake_b_pct": round(100 - sa, 2),
-                })
+            from collections import defaultdict
+            totals_by_line: dict[float, list[tuple[str, dict]]] = defaultdict(list)
+            for name, bdata in total_books:
+                line_val = bdata.get("total_line", 5.5)
+                totals_by_line[line_val].append((name, bdata))
+
+            for line, line_books in totals_by_line.items():
+                if len(line_books) < 2:
+                    continue
+                best_over = max(line_books, key=lambda x: american_to_decimal(x[1]["over_odds"]))
+                best_under = max(line_books, key=lambda x: american_to_decimal(x[1]["under_odds"]))
+                o_dec = american_to_decimal(best_over[1]["over_odds"])
+                u_dec = american_to_decimal(best_under[1]["under_odds"])
+                t_margin = 1 / o_dec + 1 / u_dec
+                if t_margin < 1.0:
+                    profit = (1 / t_margin - 1) * 100
+                    sa = (1 / o_dec) / (1 / o_dec + 1 / u_dec) * 100
+                    arbs.append({
+                        "home_team": home, "away_team": away,
+                        "market": f"Total {line}",
+                        "side_a": f"Over {line}",
+                        "side_a_book": best_over[0],
+                        "side_a_odds": round(o_dec, 2),
+                        "side_b": f"Under {line}",
+                        "side_b_book": best_under[0],
+                        "side_b_odds": round(u_dec, 2),
+                        "margin": round(t_margin, 4),
+                        "profit_pct": round(profit, 2),
+                        "stake_a_pct": round(sa, 2),
+                        "stake_b_pct": round(100 - sa, 2),
+                    })
 
     arbs.sort(key=lambda x: x["profit_pct"], reverse=True)
     return arbs
