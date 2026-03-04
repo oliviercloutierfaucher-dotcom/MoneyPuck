@@ -210,6 +210,22 @@ def infer_likely_starter(
 
     Heuristic: the goalie on the given team with the most games played is
     assumed to be the starter.  Returns ``None`` when no goalie matches.
+
+    KNOWN LIMITATION (Agent 5 audit):
+    This heuristic is a POOR proxy for "who starts tonight."
+    - Always returns the season GP leader, even on backup-start nights.
+    - Has no access to daily lineup confirmations, morning skate
+      reports, or official starting goalie announcements.
+    - In tandem situations (e.g. 40/40 GP splits), accuracy drops
+      to near coin-flip.
+    - Injured starters continue to be selected until the backup
+      overtakes them in total GP.
+    - The downstream goalie_matchup_adjustment() may apply a +/- 1-3pp
+      error on backup-start nights.
+
+    Improvement path: consume a confirmed-starter feed (DailyFaceoff,
+    LeftWingLock) or the NHL API /gamecenter/{id}/landing preview,
+    which typically includes confirmed starters 1-2 hours before puck drop.
     """
     candidates = [
         g for g in goalie_stats

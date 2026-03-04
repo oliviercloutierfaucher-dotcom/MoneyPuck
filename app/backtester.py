@@ -251,23 +251,47 @@ def grid_search(
     ----------
     param_grid:
         Dict mapping parameter names to lists of values to try.
-        Default grid searches over:
-        - half_life: [14, 21, 30, 45]
-        - regression_k: [10, 15, 20, 30]
-        - home_advantage: [0.10, 0.15, 0.20, 0.25]
-        - logistic_k: [0.8, 1.0, 1.2, 1.5]
+        Default grid searches over (expanded per Agent 5 audit):
+        - half_life: [14, 21, 30, 45, 60]
+        - regression_k: [10, 15, 20, 25, 30]
+        - home_advantage: [0.05, 0.10, 0.15, 0.18, 0.20, 0.25]
+        - logistic_k: [0.5, 0.6, 0.7, 0.8, 1.0, 1.2, 1.5]
+
+        Total default combinations: 5 * 5 * 6 * 7 = 1050.
 
     Returns a list of result dicts sorted by Brier score (best first), each containing:
         - params: dict of parameter values used
         - brier_score, log_loss, accuracy
         - n_predictions
+
+    Usage guidance
+    --------------
+    1. Run with at least one full season of MoneyPuck CSV data.
+    2. Examine the top-5 results for parameter clustering — if the
+       best results all share, e.g., half_life=30 and logistic_k=0.8,
+       those values are likely robust.
+    3. Check calibration curves (evaluate_predictions) for the best
+       config to verify the model isn't systematically over- or
+       under-confident.
+    4. Be wary of overfitting: the best grid config on one season
+       may not generalize.  Validate on a hold-out season.
     """
     if param_grid is None:
+        # Default grid expanded per Agent 5 audit.  Wider ranges test
+        # sensitivity to each parameter and help identify calibration
+        # sweet spots.  Total combinations: 5 * 5 * 6 * 7 = 1050.
+        #
+        # home_advantage: 0.05 (minimal) through 0.25 (aggressive).
+        #   0.18-0.20 may better match observed ~54-55% NHL home win rate.
+        # logistic_k: 0.5-0.7 test flatter curves (more parity), which
+        #   may better fit the NHL's competitive balance.
+        # half_life: 60 added for a less reactive, smoother model.
+        # regression_k: 10-30 tests the speed of trusting observed data.
         param_grid = {
-            "half_life": [14, 21, 30, 45],
-            "regression_k": [10, 15, 20, 30],
-            "home_advantage": [0.10, 0.15, 0.20, 0.25],
-            "logistic_k": [0.8, 1.0, 1.2, 1.5],
+            "half_life": [14, 21, 30, 45, 60],
+            "regression_k": [10, 15, 20, 25, 30],
+            "home_advantage": [0.05, 0.10, 0.15, 0.18, 0.20, 0.25],
+            "logistic_k": [0.5, 0.6, 0.7, 0.8, 1.0, 1.2, 1.5],
         }
 
     # Build list of param names and value lists in consistent order

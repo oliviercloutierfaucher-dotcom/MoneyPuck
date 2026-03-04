@@ -8,6 +8,16 @@ MoneyPuck CSV rows (``dict[str, str]`` with fields such as *gameDate*,
 Every adjustment value is expressed as a probability delta from the
 **home team's perspective** -- positive means the home team benefits,
 negative means the away team benefits.
+
+KNOWN LIMITATION (Agent 5 audit):
+Only back-to-back (0 rest days) fatigue is modeled.  More complex
+schedule density patterns are NOT detected:
+    - 3-in-4 nights (three games in four calendar days)
+    - 4-in-6 nights (four games in six days)
+    - Long road trips (5+ consecutive away games)
+Research suggests these cumulative fatigue effects are meaningful
+(estimated 1-2 pp beyond simple B2B), especially when combined
+with cross-timezone travel.
 """
 
 from __future__ import annotations

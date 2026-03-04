@@ -1,3 +1,34 @@
+"""Five-agent pipeline for NHL betting model.
+
+MISSING DATA INPUTS — Agent 5 audit
+------------------------------------
+The following data sources are NOT currently incorporated but would
+improve model accuracy and calibration:
+
+1. **Injury data**: A team missing a top player (e.g. McDavid, Matthews)
+   should have lower composite strength.  Currently the model has no
+   roster awareness and treats a depleted team identically to a healthy
+   one.  Impact: potentially 2-5 pp on individual game predictions.
+
+2. **Line movement / sharp money tracking**: Sharp money movement on
+   betting lines is one of the strongest short-term signals for game
+   outcomes.  The model only compares its probability to the current
+   line, ignoring *where the line opened* and *how it moved*.
+
+3. **Confirmed starting goalies**: See nhl_api.infer_likely_starter()
+   for details.  The current heuristic picks the GP leader, not the
+   confirmed starter.
+
+4. **Pace / era adjustment**: Raw xG values are not normalized across
+   seasons.  If league-wide scoring rates shift (e.g. post-COVID
+   changes, rule changes), historical xG comparisons are distorted.
+
+5. **Schedule density beyond B2B**: Only back-to-back games are
+   modeled in situational.py.  Fatiguing stretches like 3-in-4 nights
+   or 4-in-6 nights are not detected.  Research suggests cumulative
+   fatigue effects are meaningful (1-2 pp) beyond simple B2B.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
