@@ -60,9 +60,9 @@ fi
 echo
 echo -e "${BOLD}[4/5] Running sanity check...${NC}"
 $PY -c "
-from app.agents import TeamStrengthAgent, EdgeScoringAgent, RiskAgent
-from app.models import TrackerConfig, TeamMetrics, ValueCandidate
-from app.math_utils import logistic_win_probability, kelly_fraction
+from app.core.agents import TeamStrengthAgent, EdgeScoringAgent, RiskAgent
+from app.core.models import TrackerConfig, TeamMetrics, ValueCandidate
+from app.math.math_utils import logistic_win_probability, kelly_fraction
 print('  All modules loaded successfully')
 " || {
     echo -e "${RED}  Module import failed. Check your Python path.${NC}"
@@ -90,7 +90,7 @@ echo -e "  ${GREEN}python live_preview.py${NC}                    # Live preview
 echo -e "  ${GREEN}python tracker.py --tonight${NC}               # Tonight's bets"
 echo -e "  ${GREEN}python tracker.py --tonight --json${NC}        # JSON output (for bots)"
 echo -e "  ${GREEN}python tracker.py --army${NC}                  # 5 strategy profiles"
-echo -e "  ${GREEN}python -m app.web_preview${NC}                 # Web dashboard"
+echo -e "  ${GREEN}python -m app.web.web_preview${NC}              # Web dashboard"
 echo
 echo -e "Tuning:"
 echo -e "  ${GREEN}--bankroll 5000${NC}         Your bankroll"
