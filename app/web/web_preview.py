@@ -13,7 +13,10 @@ from app.logging_config import get_logger, setup_logging
 from app.math.math_utils import (
     american_to_decimal,
     american_to_implied_probability,
+    expected_value_per_dollar,
+    fractional_kelly,
     goalie_matchup_adjustment,
+    kelly_fraction,
     logistic_win_probability,
 )
 from app.core.models import TrackerConfig, ValueCandidate
@@ -197,7 +200,7 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
             ]:
                 edge_pp = (model_p - impl_p) * 100
                 dec_odds = american_to_decimal(odds)
-                ev = model_p * (dec_odds - 1) - (1 - model_p)
+                ev = expected_value_per_dollar(model_p, dec_odds)
                 if edge_pp >= min_edge and ev >= min_ev:
                     stake = min(bankroll * 0.03, bankroll * 0.15 / 5)
                     value_bets.append({
@@ -213,7 +216,7 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
                         "model_probability": round(model_p, 4),
                         "edge_probability_points": round(edge_pp, 2),
                         "expected_value_per_dollar": round(ev, 4),
-                        "kelly_fraction": round(max(0, (model_p * dec_odds - 1) / (dec_odds - 1)) * 0.5, 4),
+                        "kelly_fraction": round(fractional_kelly(model_p, dec_odds, 0.5), 4),
                         "confidence": round(0.55 + random.uniform(0, 0.25), 2),
                         "recommended_stake": round(stake, 2),
                         "stake_fraction": round(stake / bankroll, 4),
@@ -604,10 +607,10 @@ def _extract_value_bets_from_games(
                     continue
                 dec_odds = american_to_decimal(odds)
                 implied = american_to_implied_probability(odds)
-                ev = model_p * (dec_odds - 1) - (1 - model_p)
+                ev = expected_value_per_dollar(model_p, dec_odds)
                 if ev < config.min_ev:
                     continue
-                kelly = max(0, (model_p * dec_odds - 1) / (dec_odds - 1)) * config.kelly_fraction
+                kelly = fractional_kelly(model_p, dec_odds, config.kelly_fraction)
                 stake = min(config.bankroll * kelly, config.bankroll * config.max_fraction_per_bet)
                 bets.append({
                     "commence_time_utc": g["commence"],

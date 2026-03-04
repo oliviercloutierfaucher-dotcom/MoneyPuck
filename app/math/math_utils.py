@@ -83,6 +83,11 @@ def exponential_decay_weight(days_ago: float, half_life: float = 30.0) -> float:
           identity" while discounting stale data.
 
     Backtester grid values: [14, 21, 30, 45, 60].
+
+    Boundary behaviour:
+    - *days_ago* < 0 returns 0.0 (invalid / future game).
+    - *half_life* <= 0 returns 1.0 if ``days_ago == 0`` else 0.0.
+    - Very large *days_ago* values may underflow to 0.0, which is fine.
     """
     if days_ago < 0:
         return 0.0

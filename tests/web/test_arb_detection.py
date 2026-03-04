@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.web_preview import _detect_arbs
+from app.web.web_preview import _detect_arbs
 
 
 # ---------------------------------------------------------------------------
