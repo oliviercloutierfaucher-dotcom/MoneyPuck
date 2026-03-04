@@ -47,7 +47,8 @@ def render_dashboard(data: dict[str, Any]) -> str:
       - config: current config dict
       - rankings: optional list of (team, composite) for power rankings
     """
-    data_json = json.dumps(data)
+    # Escape </ sequences to prevent breaking out of <script> tags (XSS)
+    data_json = json.dumps(data).replace("</", r"<\/")
 
     return f"""<!doctype html>
 <html lang="en">
@@ -137,7 +138,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
       border-radius: var(--radius-sm); padding: 6px 12px;
     }}
     .control-group label {{
-      color: var(--muted); font-size: 11px;
+      color: var(--muted); font-size: 12px;
       text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
       white-space: nowrap;
     }}
@@ -177,7 +178,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     .kpi.green::after {{ background: linear-gradient(90deg, var(--green), transparent); }}
     .kpi .kpi-label {{
-      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.08em; font-weight: 600;
     }}
     .kpi .kpi-value {{
@@ -192,7 +193,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
       margin-bottom: 24px; align-items: center;
     }}
     .books-bar .label {{
-      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.08em; font-weight: 600; margin-right: 4px;
     }}
     .book-chip {{
@@ -219,7 +220,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     .section-title .count {{
       background: var(--accent); color: #0a1628; border-radius: 10px;
-      padding: 1px 8px; font-size: 11px; font-weight: 700;
+      padding: 1px 8px; font-size: 12px; font-weight: 700;
     }}
 
     /* ---- GAME CARDS ---- */
@@ -246,7 +247,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .team-badge {{
       display: inline-flex; align-items: center; justify-content: center;
       width: 36px; height: 36px; border-radius: 8px;
-      background: var(--panel-3); font-size: 11px; font-weight: 800;
+      background: var(--panel-3); font-size: 12px; font-weight: 800;
       color: var(--text); letter-spacing: 0.02em;
     }}
     .vs {{ color: var(--muted); font-size: 12px; font-weight: 400; }}
@@ -254,7 +255,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .game-value-tag {{
       background: var(--green-bg); color: var(--green);
       border: 1px solid var(--green-border); border-radius: 6px;
-      padding: 2px 10px; font-size: 11px; font-weight: 700;
+      padding: 2px 10px; font-size: 12px; font-weight: 700;
     }}
 
     /* Probability bar */
@@ -279,7 +280,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .book-odds {{ padding: 0 18px 14px; }}
     .book-odds table {{ width: 100%; border-collapse: collapse; }}
     .book-odds th {{
-      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.08em; font-weight: 600; padding: 6px 0;
       text-align: left; border-bottom: 1px solid var(--border);
     }}
@@ -297,7 +298,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     .book-odds .value-badge {{
       display: inline-flex; align-items: center; gap: 3px;
-      font-size: 10px; font-weight: 700; color: var(--green);
+      font-size: 12px; font-weight: 700; color: var(--green);
     }}
 
     /* ---- VALUE BETS TABLE ---- */
@@ -309,7 +310,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .value-table {{ border-collapse: collapse; width: 100%; min-width: 900px; }}
     .value-table th {{
       padding: 12px 14px; text-align: left;
-      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.06em; font-weight: 600;
       background: var(--panel-2); border-bottom: 1px solid var(--border);
       position: sticky; top: 0; cursor: pointer;
@@ -347,7 +348,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     .bankroll-bar .info {{ flex: 1; min-width: 200px; }}
     .bankroll-bar .info .label {{
-      color: var(--muted); font-size: 11px; text-transform: uppercase;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.08em; font-weight: 600;
     }}
     .bankroll-bar .info .amount {{ font-size: 20px; font-weight: 700; margin-top: 2px; }}
@@ -362,7 +363,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     .meter .meter-fill.warn {{ background: linear-gradient(90deg, var(--amber), var(--red)); }}
     .meter .meter-labels {{
-      display: flex; justify-content: space-between; font-size: 11px;
+      display: flex; justify-content: space-between; font-size: 12px;
       color: var(--muted); margin-top: 4px;
     }}
 
@@ -410,7 +411,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
       display: grid; grid-template-columns: 1fr 1fr 1fr;
       gap: 8px; font-size: 12px;
     }}
-    .play-details .detail-label {{ color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }}
+    .play-details .detail-label {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }}
     .play-details .detail-value {{ font-weight: 700; font-size: 15px; margin-top: 2px; }}
     .play-details .detail-value.green {{ color: var(--green); }}
 
@@ -484,7 +485,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     .modal-section table {{ width: 100%; border-collapse: collapse; }}
     .modal-section th {{
-      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      color: var(--muted); font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.06em; font-weight: 600; padding: 6px 0;
       text-align: left; border-bottom: 1px solid var(--border);
     }}
@@ -504,14 +505,31 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .top-bet-row .rank {{
       background: var(--green); color: #041109; width: 22px; height: 22px;
       border-radius: 50%; display: flex; align-items: center;
-      justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0;
+      justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0;
     }}
     .top-bet-row .bet-desc {{ font-weight: 700; }}
     .top-bet-row .bet-meta {{ color: var(--muted); font-size: 12px; margin-left: auto; }}
     .muted {{ color: var(--muted); }}
     .best-star {{ color: var(--green); font-weight: 700; }}
-    .arb-badge {{ color: var(--amber); font-weight: 700; font-size: 11px; }}
+    .arb-badge {{ color: var(--amber); font-weight: 700; font-size: 12px; }}
     .no-arb {{ color: var(--muted); font-size: 12px; padding: 8px 0; }}
+
+    /* ---- LOADING OVERLAY ---- */
+    .loading-overlay {{
+      display: none; position: fixed; inset: 0; z-index: 900;
+      background: rgba(6,8,15,0.7); backdrop-filter: blur(2px);
+      justify-content: center; align-items: center; flex-direction: column;
+    }}
+    .loading-overlay.active {{ display: flex; }}
+    .loading-spinner {{
+      width: 40px; height: 40px; border: 3px solid var(--border-2);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }}
+    .loading-text {{
+      color: var(--text-2); font-size: 14px; font-weight: 600; margin-top: 14px;
+    }}
+    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
 
     /* ---- FOOTER ---- */
     .footer {{
@@ -618,17 +636,17 @@ def render_dashboard(data: dict[str, Any]) -> str:
       <table class="value-table">
         <thead>
           <tr>
-            <th onclick="sortBets('game')">#</th>
-            <th onclick="sortBets('game')">Game</th>
-            <th onclick="sortBets('side')">Pick</th>
-            <th onclick="sortBets('sportsbook')">Book</th>
-            <th onclick="sortBets('decimal_odds')">Odds</th>
-            <th onclick="sortBets('implied_probability')">Market %</th>
-            <th onclick="sortBets('model_probability')">Model %</th>
-            <th onclick="sortBets('edge_probability_points')">Edge</th>
-            <th onclick="sortBets('expected_value_per_dollar')">EV/$</th>
-            <th onclick="sortBets('confidence')">Conf</th>
-            <th onclick="sortBets('recommended_stake')">Stake</th>
+            <th onclick="sortBets('game')" data-sort-key="game">#</th>
+            <th onclick="sortBets('game')" data-sort-key="game">Game</th>
+            <th onclick="sortBets('side')" data-sort-key="side">Pick</th>
+            <th onclick="sortBets('sportsbook')" data-sort-key="sportsbook">Book</th>
+            <th onclick="sortBets('decimal_odds')" data-sort-key="decimal_odds">Odds</th>
+            <th onclick="sortBets('implied_probability')" data-sort-key="implied_probability">Market %</th>
+            <th onclick="sortBets('model_probability')" data-sort-key="model_probability">Model %</th>
+            <th onclick="sortBets('edge_probability_points')" data-sort-key="edge_probability_points">Edge</th>
+            <th onclick="sortBets('expected_value_per_dollar')" data-sort-key="expected_value_per_dollar">EV/$</th>
+            <th onclick="sortBets('confidence')" data-sort-key="confidence">Conf</th>
+            <th onclick="sortBets('recommended_stake')" data-sort-key="recommended_stake">Stake</th>
           </tr>
         </thead>
         <tbody id="bets-body"></tbody>
@@ -642,23 +660,65 @@ def render_dashboard(data: dict[str, Any]) -> str:
   </div>
 </div>
 
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Loading dashboard...</div>
+</div>
+
 <!-- GAME DETAIL MODAL -->
-<div class="modal-backdrop" id="game-modal" onclick="if(event.target===this)closeGameModal()">
+<div class="modal-backdrop" id="game-modal" onclick="if(event.target===this)closeGameModal()" role="dialog" aria-modal="true" aria-label="Game detail">
   <div class="modal-content" id="modal-body"></div>
 </div>
 
+<script type="application/json" id="app-data">{data_json}</script>
 <script>
-const D = {data_json};
+const D = JSON.parse(document.getElementById('app-data').textContent);
+function esc(s){{const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}}
 let activeBooks = new Set((D.books || []).map(b => b));
 let currentData = D;
 let currentFilteredGames = [];
 let sortKey = 'edge_probability_points';
 let sortDesc = true;
 
+function savePrefs() {{
+  try {{
+    localStorage.setItem('mp_region', document.getElementById('ctl-region').value);
+    localStorage.setItem('mp_bankroll', document.getElementById('ctl-bankroll').value);
+    localStorage.setItem('mp_min_edge', document.getElementById('ctl-min-edge').value);
+    localStorage.setItem('mp_min_ev', document.getElementById('ctl-min-ev').value);
+    localStorage.setItem('mp_activeBooks', JSON.stringify([...activeBooks]));
+  }} catch(e) {{}}
+}}
+
+function restorePrefs() {{
+  try {{
+    const region = localStorage.getItem('mp_region');
+    if (region) document.getElementById('ctl-region').value = region;
+    const bankroll = localStorage.getItem('mp_bankroll');
+    if (bankroll) document.getElementById('ctl-bankroll').value = bankroll;
+    const minEdge = localStorage.getItem('mp_min_edge');
+    if (minEdge) document.getElementById('ctl-min-edge').value = minEdge;
+    const minEv = localStorage.getItem('mp_min_ev');
+    if (minEv) document.getElementById('ctl-min-ev').value = minEv;
+    const savedBooks = localStorage.getItem('mp_activeBooks');
+    if (savedBooks) {{
+      const arr = JSON.parse(savedBooks);
+      const available = new Set(D.books || []);
+      activeBooks = new Set(arr.filter(b => available.has(b)));
+    }}
+  }} catch(e) {{}}
+}}
+
 function init() {{
+  restorePrefs();
   renderBooks(D.books || []);
   render(D);
   document.addEventListener('keydown', e => {{ if (e.key === 'Escape') closeGameModal(); }});
+  // Save prefs when controls change
+  ['ctl-region','ctl-bankroll','ctl-min-edge','ctl-min-ev'].forEach(id => {{
+    document.getElementById(id).addEventListener('change', savePrefs);
+  }});
 }}
 
 function renderBooks(books) {{
@@ -668,11 +728,18 @@ function renderBooks(books) {{
     const chip = document.createElement('div');
     chip.className = 'book-chip' + (activeBooks.has(b) ? ' active' : '');
     chip.textContent = b;
-    chip.onclick = () => {{
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
+    chip.setAttribute('aria-pressed', activeBooks.has(b) ? 'true' : 'false');
+    const toggle = () => {{
       if (activeBooks.has(b)) activeBooks.delete(b); else activeBooks.add(b);
       chip.classList.toggle('active');
+      chip.setAttribute('aria-pressed', activeBooks.has(b) ? 'true' : 'false');
       render(currentData);
+      savePrefs();
     }};
+    chip.onclick = toggle;
+    chip.onkeydown = (e) => {{ if (e.key === 'Enter' || e.key === ' ') {{ e.preventDefault(); toggle(); }} }};
     bar.appendChild(chip);
   }});
 }}
@@ -751,15 +818,15 @@ function renderPlays(bets) {{
     return;
   }}
   grid.innerHTML = bets.slice(0, 8).map((b, i) => {{
-    const game = b.away_team + ' @ ' + b.home_team;
+    const game = esc(b.away_team) + ' @ ' + esc(b.home_team);
     const odds = b.decimal_odds || dec(b.american_odds);
     return `
       <div class="play-card">
         <div class="play-num">${{i+1}}</div>
-        <div class="play-action">BET ${{b.side}} ${{b.market || 'ML'}}</div>
+        <div class="play-action">BET ${{esc(b.side)}} ${{esc(b.market || 'ML')}}</div>
         <div class="play-game">${{game}}</div>
         <div class="play-details">
-          <div><div class="detail-label">Book</div><div class="detail-value">${{b.sportsbook}}</div></div>
+          <div><div class="detail-label">Book</div><div class="detail-value">${{esc(b.sportsbook)}}</div></div>
           <div><div class="detail-label">Odds</div><div class="detail-value">${{odds}}</div></div>
           <div><div class="detail-label">Stake</div><div class="detail-value green">$${{n(b.recommended_stake)}}</div></div>
           <div><div class="detail-label">Edge</div><div class="detail-value green">+${{n(b.edge_probability_points)}}pp</div></div>
@@ -778,22 +845,22 @@ function renderArbs(arbs) {{
     return;
   }}
   grid.innerHTML = arbs.map(a => {{
-    const game = a.away_team + ' @ ' + a.home_team;
+    const game = esc(a.away_team) + ' @ ' + esc(a.home_team);
     const dollarA = (a.stake_a_pct).toFixed(2);
     const dollarB = (a.stake_b_pct).toFixed(2);
     return `
       <div class="arb-card">
-        <div class="arb-title">ARB: ${{a.market}}</div>
+        <div class="arb-title">ARB: ${{esc(a.market)}}</div>
         <div class="arb-game">${{game}}</div>
         <div class="arb-leg">
-          <span class="leg-side">${{a.side_a}}</span>
-          <span class="leg-book">${{a.side_a_book}}</span>
+          <span class="leg-side">${{esc(a.side_a)}}</span>
+          <span class="leg-book">${{esc(a.side_a_book)}}</span>
           <span class="leg-odds">${{n(a.side_a_odds)}}</span>
           <span class="leg-stake">${{n(a.stake_a_pct, 1)}}% ($${{dollarA}})</span>
         </div>
         <div class="arb-leg">
-          <span class="leg-side">${{a.side_b}}</span>
-          <span class="leg-book">${{a.side_b_book}}</span>
+          <span class="leg-side">${{esc(a.side_b)}}</span>
+          <span class="leg-book">${{esc(a.side_b_book)}}</span>
           <span class="leg-odds">${{n(a.side_b_odds)}}</span>
           <span class="leg-stake">${{n(a.stake_b_pct, 1)}}% ($${{dollarB}})</span>
         </div>
@@ -817,21 +884,21 @@ function renderGameCard(g, bets, idx) {{
   if (g.books && g.books.length) {{
     const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
     const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
-    const polyLine = g.poly_home_prob ? ` &middot; <span style="color:var(--amber)">Poly: ${{g.home}} ${{pct(g.poly_home_prob)}}</span>` : '';
+    const polyLine = g.poly_home_prob ? ` &middot; <span style="color:var(--amber)">Poly: ${{esc(g.home)}} ${{pct(g.poly_home_prob)}}</span>` : '';
     bestLine = `<div style="padding:8px 18px 14px;font-size:12px;color:var(--text-2)">
-      Best ML: <strong>${{g.home}} ${{dec(bestH)}}</strong> &middot;
-      <strong>${{g.away}} ${{dec(bestA)}}</strong>
+      Best ML: <strong>${{esc(g.home)}} ${{dec(bestH)}}</strong> &middot;
+      <strong>${{esc(g.away)}} ${{dec(bestA)}}</strong>
       &middot; ${{g.books.length}} books${{polyLine}}
     </div>`;
   }}
 
   return `
-    <div class="game-card ${{hasValue ? 'has-value' : ''}}" onclick="openGameModal(${{idx}})">
+    <div class="game-card ${{hasValue ? 'has-value' : ''}}" onclick="openGameModal(${{idx}})" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();openGameModal(${{idx}})}}">
       <div class="game-header">
         <div class="game-matchup">
-          <span class="team-badge">${{g.away}}</span>
+          <span class="team-badge">${{esc(g.away)}}</span>
           <span class="vs">@</span>
-          <span class="team-badge">${{g.home}}</span>
+          <span class="team-badge">${{esc(g.home)}}</span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           ${{hasValue ? '<span class="game-value-tag">VALUE</span>' : ''}}
@@ -840,8 +907,8 @@ function renderGameCard(g, bets, idx) {{
       </div>
       <div class="prob-bar-wrap">
         <div class="prob-labels">
-          <div><span class="team">${{g.away}}</span> <span class="pct">${{ap}}%</span></div>
-          <div><span class="pct">${{hp}}%</span> <span class="team">${{g.home}}</span></div>
+          <div><span class="team">${{esc(g.away)}}</span> <span class="pct">${{ap}}%</span></div>
+          <div><span class="pct">${{hp}}%</span> <span class="team">${{esc(g.home)}}</span></div>
         </div>
         <div class="prob-bar"><div class="fill" style="width:${{hp}}%"></div></div>
       </div>
@@ -890,7 +957,7 @@ function openGameModal(idx) {{
     top3Html = `<div class="top-bets">
       ${{top3.map((b, i) => `<div class="top-bet-row">
         <span class="rank">${{i+1}}</span>
-        <span class="bet-desc">${{b.side}} ${{b.market}} @ ${{b.book}}</span>
+        <span class="bet-desc">${{esc(b.side)}} ${{esc(b.market)}} @ ${{esc(b.book)}}</span>
         <span class="bet-meta">${{n(b.odds)}} &middot; EV +${{n(b.ev, 3)}} &middot; Edge +${{n(b.edge)}}pp</span>
       </div>`).join('')}}
     </div>`;
@@ -904,12 +971,12 @@ function openGameModal(idx) {{
     const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
     const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
     mlHtml = `<table>
-      <tr><th>Book</th><th>${{g.home}}</th><th>${{g.away}}</th><th>Edge</th></tr>
+      <tr><th>Book</th><th>${{esc(g.home)}}</th><th>${{esc(g.away)}}</th><th>Edge</th></tr>
       ${{g.books.map(b => {{
         const hE = b.home_edge || 0, aE = b.away_edge || 0;
         const best = Math.max(hE, aE);
         return `<tr>
-          <td style="font-weight:600;color:var(--text-2)">${{b.name}}</td>
+          <td style="font-weight:600;color:var(--text-2)">${{esc(b.name)}}</td>
           <td class="odds">${{b.home_odds === bestH ? '<span class="best-star">' : ''}}\
 ${{dec(b.home_odds)}}${{b.home_odds === bestH ? ' &#9733;</span>' : ''}}</td>
           <td class="odds">${{b.away_odds === bestA ? '<span class="best-star">' : ''}}\
@@ -930,9 +997,9 @@ ${{dec(b.away_odds)}}${{b.away_odds === bestA ? ' &#9733;</span>' : ''}}</td>
     const bestHS = Math.max(...sb.map(b => b.home_spread_odds || -9999));
     const bestAS = Math.max(...sb.map(b => b.away_spread_odds || -9999));
     spreadHtml = `<table>
-      <tr><th>Book</th><th>${{g.home}} ${{spread}}</th><th>${{g.away}} ${{-spread}}</th></tr>
+      <tr><th>Book</th><th>${{esc(g.home)}} ${{spread}}</th><th>${{esc(g.away)}} ${{-spread}}</th></tr>
       ${{sb.map(b => `<tr>
-        <td style="font-weight:600;color:var(--text-2)">${{b.name}}</td>
+        <td style="font-weight:600;color:var(--text-2)">${{esc(b.name)}}</td>
         <td class="odds">${{b.home_spread_odds === bestHS ? '<span class="best-star">' : ''}}\
 ${{dec(b.home_spread_odds)}}${{b.home_spread_odds === bestHS ? ' &#9733;</span>' : ''}}</td>
         <td class="odds">${{b.away_spread_odds === bestAS ? '<span class="best-star">' : ''}}\
@@ -950,7 +1017,7 @@ ${{dec(b.away_spread_odds)}}${{b.away_spread_odds === bestAS ? ' &#9733;</span>'
     totalHtml = `<table>
       <tr><th>Book</th><th>Over ${{line}}</th><th>Under ${{line}}</th></tr>
       ${{tb.map(b => `<tr>
-        <td style="font-weight:600;color:var(--text-2)">${{b.name}}</td>
+        <td style="font-weight:600;color:var(--text-2)">${{esc(b.name)}}</td>
         <td class="odds">${{b.over_odds === bestO ? '<span class="best-star">' : ''}}\
 ${{dec(b.over_odds)}}${{b.over_odds === bestO ? ' &#9733;</span>' : ''}}</td>
         <td class="odds">${{b.under_odds === bestU ? '<span class="best-star">' : ''}}\
@@ -961,7 +1028,7 @@ ${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
   // ---- ARB CHECK ----
   let arbHtml = '';
   if (arbs.length) {{
-    arbHtml = arbs.map(a => `<div class="arb-badge">ARB: ${{a.market}} — ${{a.side_a}} @ ${{a.side_a_book}} (${{n(a.side_a_odds)}}) vs ${{a.side_b}} @ ${{a.side_b_book}} (${{n(a.side_b_odds)}}) — +${{n(a.profit_pct)}}%</div>`).join('');
+    arbHtml = arbs.map(a => `<div class="arb-badge">ARB: ${{esc(a.market)}} — ${{esc(a.side_a)}} @ ${{esc(a.side_a_book)}} (${{n(a.side_a_odds)}}) vs ${{esc(a.side_b)}} @ ${{esc(a.side_b_book)}} (${{n(a.side_b_odds)}}) — +${{n(a.profit_pct)}}%</div>`).join('');
   }} else {{
     // Compute closest margin
     let closest = 999;
@@ -986,7 +1053,7 @@ ${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
     polyHtml = `<div class="modal-section">
       <h3>Polymarket vs Model</h3>
       <table>
-        <tr><th></th><th>${{g.home}}</th><th>${{g.away}}</th></tr>
+        <tr><th></th><th>${{esc(g.home)}}</th><th>${{esc(g.away)}}</th></tr>
         <tr>
           <td style="font-weight:600;color:var(--text-2)">Our Model</td>
           <td style="font-weight:700">${{hp}}%</td>
@@ -1012,15 +1079,15 @@ ${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
     <button class="modal-close" onclick="closeGameModal()">&times;</button>
     <div class="modal-header">
       <div class="modal-matchup">
-        <span class="team-badge">${{g.away}}</span>
+        <span class="team-badge">${{esc(g.away)}}</span>
         <span class="vs">@</span>
-        <span class="team-badge">${{g.home}}</span>
+        <span class="team-badge">${{esc(g.home)}}</span>
         <span style="margin-left:auto;color:var(--muted);font-size:13px">${{time}}</span>
       </div>
       <div class="prob-bar-wrap" style="padding:0;margin-top:8px">
         <div class="prob-labels">
-          <div><span class="team">${{g.away}}</span> <span class="pct">${{ap}}%</span></div>
-          <div><span class="pct">${{hp}}%</span> <span class="team">${{g.home}}</span></div>
+          <div><span class="team">${{esc(g.away)}}</span> <span class="pct">${{ap}}%</span></div>
+          <div><span class="pct">${{hp}}%</span> <span class="team">${{esc(g.home)}}</span></div>
         </div>
         <div class="prob-bar"><div class="fill" style="width:${{hp}}%"></div></div>
       </div>
@@ -1043,11 +1110,30 @@ ${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
   `;
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+  // Focus trap: focus the close button and trap Tab
+  const closeBtn = document.querySelector('.modal-close');
+  if (closeBtn) closeBtn.focus();
+  modal._prevFocus = document.activeElement;
+  modal._trapHandler = function(e) {{
+    if (e.key !== 'Tab') return;
+    const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey) {{
+      if (document.activeElement === first) {{ e.preventDefault(); last.focus(); }}
+    }} else {{
+      if (document.activeElement === last) {{ e.preventDefault(); first.focus(); }}
+    }}
+  }};
+  modal.addEventListener('keydown', modal._trapHandler);
 }}
 
 function closeGameModal() {{
-  document.getElementById('game-modal').classList.remove('open');
+  const modal = document.getElementById('game-modal');
+  modal.classList.remove('open');
   document.body.style.overflow = '';
+  if (modal._trapHandler) {{ modal.removeEventListener('keydown', modal._trapHandler); modal._trapHandler = null; }}
+  if (modal._prevFocus) {{ modal._prevFocus.focus(); modal._prevFocus = null; }}
 }}
 
 /* ---- VALUE BETS TABLE (decimal only) ---- */
@@ -1064,7 +1150,7 @@ function renderBets(bets) {{
     return;
   }}
   body.innerHTML = sorted.map((b, i) => {{
-    const game = b.away_team + ' @ ' + b.home_team;
+    const game = esc(b.away_team) + ' @ ' + esc(b.home_team);
     const edgeW = Math.min(b.edge_probability_points * 4, 80);
     const conf = b.confidence || 0;
     const confClass = conf >= 0.7 ? 'conf-high' : conf >= 0.4 ? 'conf-med' : 'conf-low';
@@ -1072,8 +1158,8 @@ function renderBets(bets) {{
     return `<tr>
       <td>${{i+1}}</td>
       <td>${{game}}</td>
-      <td style="font-weight:700">${{b.side}} ${{b.market || 'ML'}}</td>
-      <td>${{b.sportsbook}}</td>
+      <td style="font-weight:700">${{esc(b.side)}} ${{esc(b.market || 'ML')}}</td>
+      <td>${{esc(b.sportsbook)}}</td>
       <td class="odds-col">${{odds}}</td>
       <td>${{pct(b.implied_probability)}}</td>
       <td style="font-weight:600">${{pct(b.model_probability)}}</td>
@@ -1088,12 +1174,22 @@ function renderBets(bets) {{
 function sortBets(key) {{
   if (sortKey === key) sortDesc = !sortDesc;
   else {{ sortKey = key; sortDesc = true; }}
+  // Update aria-sort on table headers
+  document.querySelectorAll('.value-table th[data-sort-key]').forEach(th => {{
+    if (th.dataset.sortKey === key) {{
+      th.setAttribute('aria-sort', sortDesc ? 'descending' : 'ascending');
+    }} else {{
+      th.removeAttribute('aria-sort');
+    }}
+  }});
   render(currentData);
 }}
 
 async function refreshDashboard(demo) {{
   const btn = document.getElementById('btn-refresh');
+  const overlay = document.getElementById('loading-overlay');
   btn.textContent = 'Loading...'; btn.disabled = true;
+  overlay.classList.add('active');
   try {{
     const params = new URLSearchParams({{
       region: document.getElementById('ctl-region').value,
@@ -1109,10 +1205,12 @@ async function refreshDashboard(demo) {{
     activeBooks = new Set(data.books || []);
     renderBooks(data.books || []);
     render(data);
+    savePrefs();
   }} catch(e) {{
     alert('Network error: ' + e.message);
   }} finally {{
     btn.textContent = 'Refresh'; btn.disabled = false;
+    overlay.classList.remove('active');
   }}
 }}
 

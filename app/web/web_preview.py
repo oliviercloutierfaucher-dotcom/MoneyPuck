@@ -640,6 +640,16 @@ def _extract_value_bets_from_games(
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
+    def _send_security_headers(self) -> None:
+        """Add security headers to every response."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+        )
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
@@ -660,6 +670,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     body = json.dumps(dashboard_data, indent=2).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self._send_security_headers()
                     self.end_headers()
                     self.wfile.write(body)
                     return
@@ -668,6 +679,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 body = render_dashboard(dashboard_data).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._send_security_headers()
                 self.end_headers()
                 self.wfile.write(body)
                 return
@@ -683,31 +695,36 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     body = json.dumps(to_serializable(recommendations), indent=2).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
+                self._send_security_headers()
                 self.end_headers()
                 self.wfile.write(body)
                 return
 
             self.send_response(404)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Not found"}).encode("utf-8"))
 
-        except ValueError as exc:
-            log.warning("Bad request: %s", exc)
+        except ValueError:
+            log.warning("Bad request: %s", "invalid parameters")
             self.send_response(400)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self._send_security_headers()
             self.end_headers()
-            self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            self.wfile.write(json.dumps({"error": "Invalid request parameters"}).encode("utf-8"))
         except (OSError, TimeoutError) as exc:
             log.error("Network error: %s", exc)
             self.send_response(502)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Upstream data source unavailable"}).encode("utf-8"))
         except Exception:
             log.exception("Unexpected error")
             self.send_response(500)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Internal server error"}).encode("utf-8"))
 
@@ -717,7 +734,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     setup_logging()
-    host = os.getenv("PREVIEW_HOST", "0.0.0.0")
+    host = os.getenv("PREVIEW_HOST", "127.0.0.1")
     port = int(os.getenv("PREVIEW_PORT", "8080"))
     server = ThreadingHTTPServer((host, port), PreviewHandler)
     log.info("Preview server starting on http://%s:%d", host, port)
