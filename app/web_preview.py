@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .data_sources import get_books_for_region, QUEBEC_BOOKS, team_code, TEAM_NAME_TO_CODE
+from .polymarket import fetch_nhl_events, fetch_nhl_series_id, match_polymarket_to_games
 from .logging_config import get_logger, setup_logging
 from .math_utils import (
     american_to_decimal,
@@ -234,6 +235,14 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
         if key not in best_bets or vb["edge_probability_points"] > best_bets[key]["edge_probability_points"]:
             best_bets[key] = vb
     value_bets = sorted(best_bets.values(), key=lambda x: x["expected_value_per_dollar"], reverse=True)
+
+    # Add Polymarket probabilities (simulated for demo — live fetches real data)
+    for g in games:
+        random.seed(hash(g["home"] + g["away"] + "poly"))
+        # Polymarket crowd tends to be slightly off from model
+        poly_shift = random.gauss(0, 0.04)
+        g["poly_home_prob"] = round(max(0.02, min(0.98, g["home_prob"] + poly_shift)), 4)
+        g["poly_away_prob"] = round(1 - g["poly_home_prob"], 4)
 
     # Seed a couple of arb opportunities for demo by tweaking odds on 2 games
     # Make book[0] favor home and book[1] favor away enough for an arb
@@ -511,6 +520,20 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
         value_bets = _extract_value_bets_from_games(games, config)
     else:
         value_bets = to_serializable(recommendations)
+
+    # Fetch Polymarket data
+    try:
+        series_id = fetch_nhl_series_id()
+        poly_events = fetch_nhl_events(series_id)
+        poly_map = match_polymarket_to_games(poly_events, games)
+        for g in games:
+            key = f"{g['home']}-{g['away']}"
+            if key in poly_map:
+                g["poly_home_prob"] = poly_map[key]["poly_home_prob"]
+                g["poly_away_prob"] = poly_map[key]["poly_away_prob"]
+        log.info("Polymarket: matched %d/%d games", len(poly_map), len(games))
+    except Exception:
+        log.warning("Polymarket fetch failed — continuing without it")
 
     arb_opportunities = _detect_arbs(games)
 

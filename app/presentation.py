@@ -810,15 +810,16 @@ function renderGameCard(g, bets, idx) {{
   const ap = (g.away_prob * 100).toFixed(1);
   const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit', timeZone:'America/New_York'}}) + ' ET' : '';
 
-  // Best ML line summary
+  // Best ML line summary + Polymarket
   let bestLine = '';
   if (g.books && g.books.length) {{
     const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
     const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
+    const polyLine = g.poly_home_prob ? ` &middot; <span style="color:var(--amber)">Poly: ${{g.home}} ${{pct(g.poly_home_prob)}}</span>` : '';
     bestLine = `<div style="padding:8px 18px 14px;font-size:12px;color:var(--text-2)">
       Best ML: <strong>${{g.home}} ${{dec(bestH)}}</strong> &middot;
       <strong>${{g.away}} ${{dec(bestA)}}</strong>
-      &middot; ${{g.books.length}} books
+      &middot; ${{g.books.length}} books${{polyLine}}
     </div>`;
   }}
 
@@ -972,6 +973,37 @@ ${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
     arbHtml = `<div class="no-arb">No arb on this game${{closest < 999 ? ' (margin: ' + n(closest, 3) + ')' : ''}}</div>`;
   }}
 
+  // ---- POLYMARKET COMPARISON ----
+  let polyHtml = '';
+  if (g.poly_home_prob) {{
+    const pHP = pct(g.poly_home_prob);
+    const pAP = pct(g.poly_away_prob);
+    const modelDiffH = ((g.home_prob - g.poly_home_prob) * 100).toFixed(1);
+    const modelDiffA = ((g.away_prob - g.poly_away_prob) * 100).toFixed(1);
+    const diffColor = v => parseFloat(v) > 0 ? 'var(--green)' : parseFloat(v) < 0 ? 'var(--red)' : 'var(--muted)';
+    polyHtml = `<div class="modal-section">
+      <h3>Polymarket vs Model</h3>
+      <table>
+        <tr><th></th><th>${{g.home}}</th><th>${{g.away}}</th></tr>
+        <tr>
+          <td style="font-weight:600;color:var(--text-2)">Our Model</td>
+          <td style="font-weight:700">${{hp}}%</td>
+          <td style="font-weight:700">${{ap}}%</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--amber)">Polymarket</td>
+          <td>${{pHP}}</td>
+          <td>${{pAP}}</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:var(--muted)">Edge vs Poly</td>
+          <td style="font-weight:700;color:${{diffColor(modelDiffH)}}">${{modelDiffH > 0 ? '+' : ''}}${{modelDiffH}}pp</td>
+          <td style="font-weight:700;color:${{diffColor(modelDiffA)}}">${{modelDiffA > 0 ? '+' : ''}}${{modelDiffA}}pp</td>
+        </tr>
+      </table>
+    </div>`;
+  }}
+
   // ---- BUILD MODAL ----
   const modal = document.getElementById('game-modal');
   document.getElementById('modal-body').innerHTML = `
@@ -991,6 +1023,7 @@ ${{dec(b.under_odds)}}${{b.under_odds === bestU ? ' &#9733;</span>' : ''}}</td>
         <div class="prob-bar"><div class="fill" style="width:${{hp}}%"></div></div>
       </div>
     </div>
+    ${{polyHtml}}
     <div class="modal-section">
       <h3>Top 3 Best Bets (by EV)</h3>
       ${{top3Html}}
