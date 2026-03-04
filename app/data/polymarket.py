@@ -14,8 +14,8 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from .data_sources import TEAM_NAME_TO_CODE, team_code
-from .logging_config import get_logger
+from app.data.data_sources import TEAM_NAME_TO_CODE, team_code
+from app.logging_config import get_logger
 
 log = get_logger("polymarket")
 

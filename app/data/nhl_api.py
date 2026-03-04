@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any
 from urllib.request import Request, urlopen
 
-from .logging_config import get_logger
+from app.logging_config import get_logger
 
 log = get_logger("nhl_api")
 

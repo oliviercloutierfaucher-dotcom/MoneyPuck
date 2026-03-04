@@ -9,11 +9,11 @@ import os
 import sys
 from datetime import date
 
-from app.army import run_agent_army
+from app.core.army import run_agent_army
 from app.logging_config import get_logger, setup_logging
-from app.models import TrackerConfig
-from app.presentation import to_serializable
-from app.service import run_tracker
+from app.core.models import TrackerConfig
+from app.web.presentation import to_serializable
+from app.core.service import run_tracker
 
 log = get_logger("cli")
 
@@ -97,7 +97,7 @@ def _print_human(recommendations: list[dict[str, object]], config: TrackerConfig
 
 def _print_tonight(recommendations: list[dict[str, object]], snapshot, config: TrackerConfig) -> None:
     """Rich output for --tonight mode with game matchups + value bets."""
-    from app.math_utils import logistic_win_probability, goalie_matchup_adjustment
+    from app.math.math_utils import logistic_win_probability, goalie_matchup_adjustment
 
     today_str = date.today().isoformat()
     strength = snapshot.team_strength
@@ -188,8 +188,8 @@ def main() -> int:
     try:
         # Phase 4: model health report from stored predictions
         if args.validate:
-            from app.database import TrackerDatabase
-            from app.validation import model_health_report
+            from app.data.database import TrackerDatabase
+            from app.math.validation import model_health_report
             with TrackerDatabase() as db:
                 settled = db.get_predictions()
                 settled = [s for s in settled if s.get("outcome") is not None]
@@ -198,8 +198,8 @@ def main() -> int:
             return 0
 
         if args.backtest:
-            from app.backtester import backtest_season, evaluate_predictions
-            from app.data_sources import fetch_moneypuck_games
+            from app.core.backtester import backtest_season, evaluate_predictions
+            from app.data.data_sources import fetch_moneypuck_games
             log.info("Starting backtest for season %d", config.season)
             games = fetch_moneypuck_games(config.season)
             log.info("Backtesting %d games", len(games))
@@ -215,12 +215,12 @@ def main() -> int:
             return 0
 
         if args.tonight:
-            from app.service import build_market_snapshot, score_snapshot
+            from app.core.service import build_market_snapshot, score_snapshot
             snapshot, games_rows = build_market_snapshot(config)
             recommendations = score_snapshot(snapshot, config, games_rows)
 
             if config.persist and recommendations:
-                from app.service import _persist_recommendations
+                from app.core.service import _persist_recommendations
                 _persist_recommendations(recommendations, config)
 
             if args.json:
@@ -250,7 +250,7 @@ def main() -> int:
                     },
                 }
                 # Add game-level model probabilities
-                from app.math_utils import logistic_win_probability, goalie_matchup_adjustment
+                from app.math.math_utils import logistic_win_probability, goalie_matchup_adjustment
                 for event in snapshot.odds_events:
                     home = event.get("home_team", "")
                     away = event.get("away_team", "")

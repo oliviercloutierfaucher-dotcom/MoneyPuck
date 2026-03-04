@@ -1,8 +1,8 @@
 """Backtesting framework tests for model calibration and parameter optimization."""
 import math
 
-from app.backtester import backtest_season, evaluate_predictions, grid_search
-from app.models import TrackerConfig
+from app.core.backtester import backtest_season, evaluate_predictions, grid_search
+from app.core.models import TrackerConfig
 
 
 # ---------------------------------------------------------------------------

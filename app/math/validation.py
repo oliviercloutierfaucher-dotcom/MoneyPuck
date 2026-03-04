@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .math_utils import american_to_implied_probability
+from app.math.math_utils import american_to_implied_probability
 
 
 # ---------------------------------------------------------------------------

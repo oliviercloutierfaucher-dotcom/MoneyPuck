@@ -1,7 +1,7 @@
 """Phase 1: Multi-factor team strength model tests."""
 
-from app.agents import TeamStrengthAgent
-from app.math_utils import (
+from app.core.agents import TeamStrengthAgent
+from app.math.math_utils import (
     composite_strength,
     exponential_decay_weight,
     regress_to_mean,

@@ -5,7 +5,7 @@ import json
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
 
-from app import nhl_api
+from app.data import nhl_api
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ GOALIE_LEADERS_WINS = {
 # ---------------------------------------------------------------------------
 
 
-@patch("app.nhl_api.urlopen")
+@patch("app.data.nhl_api.urlopen")
 def test_fetch_json_success(mock_urlopen):
     """urlopen returns valid JSON bytes -> _fetch_json parses correctly."""
     payload = {"key": "value", "count": 42}
@@ -167,7 +167,7 @@ def test_fetch_json_success(mock_urlopen):
     mock_urlopen.assert_called_once()
 
 
-@patch("app.nhl_api.urlopen")
+@patch("app.data.nhl_api.urlopen")
 def test_fetch_json_failure(mock_urlopen):
     """urlopen raises URLError -> _fetch_json returns empty dict."""
     mock_urlopen.side_effect = URLError("DNS lookup failed")
@@ -182,7 +182,7 @@ def test_fetch_json_failure(mock_urlopen):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.nhl_api._fetch_json")
+@patch("app.data.nhl_api._fetch_json")
 def test_fetch_schedule_parses_games(mock_fetch):
     """Realistic schedule structure -> fetch_schedule returns game dicts."""
     mock_fetch.return_value = SCHEDULE_RESPONSE
@@ -202,7 +202,7 @@ def test_fetch_schedule_parses_games(mock_fetch):
     assert g1["away_team"] == "NYR"
 
 
-@patch("app.nhl_api._fetch_json")
+@patch("app.data.nhl_api._fetch_json")
 def test_fetch_schedule_empty(mock_fetch):
     """Empty games list in schedule -> returns empty list."""
     mock_fetch.return_value = EMPTY_SCHEDULE_RESPONSE
@@ -217,7 +217,7 @@ def test_fetch_schedule_empty(mock_fetch):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.nhl_api._fetch_json")
+@patch("app.data.nhl_api._fetch_json")
 def test_fetch_standings_parses(mock_fetch):
     """Standings response -> fetch_standings returns team dicts."""
     mock_fetch.return_value = STANDINGS_RESPONSE
@@ -244,7 +244,7 @@ def test_fetch_standings_parses(mock_fetch):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.nhl_api._fetch_json")
+@patch("app.data.nhl_api._fetch_json")
 def test_fetch_goalie_stats_parses(mock_fetch):
     """Goalie stats response -> parsed into list of goalie dicts."""
     # Two calls: first for savePctg, second for wins

@@ -14,9 +14,9 @@ import random
 import sys
 
 from app.logging_config import setup_logging, get_logger
-from app.agents import TeamStrengthAgent, EdgeScoringAgent, RiskAgent
-from app.math_utils import logistic_win_probability, goalie_matchup_adjustment
-from app.models import TrackerConfig, TeamMetrics, ValueCandidate
+from app.core.agents import TeamStrengthAgent, EdgeScoringAgent, RiskAgent
+from app.math.math_utils import logistic_win_probability, goalie_matchup_adjustment
+from app.core.models import TrackerConfig, TeamMetrics, ValueCandidate
 
 log = get_logger("preview")
 
@@ -257,12 +257,12 @@ def main() -> int:
     if not use_demo:
         print("\n[1/4] Fetching MoneyPuck team game-by-game data...")
         try:
-            from app.data_sources import fetch_team_game_by_game
+            from app.data.data_sources import fetch_team_game_by_game
             games = fetch_team_game_by_game(args.season)
             print(f"  -> Loaded {len(games)} rows via team game-by-game (100+ columns)")
         except Exception:
             try:
-                from app.data_sources import fetch_moneypuck_games
+                from app.data.data_sources import fetch_moneypuck_games
                 games = fetch_moneypuck_games(args.season)
                 print(f"  -> Loaded {len(games)} rows via bulk CSV (fallback)")
             except Exception:
@@ -272,7 +272,7 @@ def main() -> int:
     if not use_demo:
         print("\n[2/4] Fetching NHL goalie stats...")
         try:
-            from app.nhl_api import fetch_goalie_stats
+            from app.data.nhl_api import fetch_goalie_stats
             goalie_stats = fetch_goalie_stats()
             print(f"  -> Loaded {len(goalie_stats)} goalies")
         except Exception:
@@ -338,7 +338,7 @@ def main() -> int:
 
     if args.odds_api_key and not use_demo:
         try:
-            from app.data_sources import fetch_odds
+            from app.data.data_sources import fetch_odds
             odds_events = fetch_odds(args.odds_api_key, args.region, None)
             source_label = "LIVE ODDS"
         except Exception:
@@ -424,7 +424,7 @@ def main() -> int:
     python tracker.py --army --json
 
   To start the web dashboard:
-    python -m app.web_preview               # http://localhost:8080
+    python -m app.web.web_preview            # http://localhost:8080
 
   Model: 16-metric composite | Logistic win prob | Confidence-adj Kelly
   Data: MoneyPuck team GBG (100+ cols) + NHL API goalies + The Odds API

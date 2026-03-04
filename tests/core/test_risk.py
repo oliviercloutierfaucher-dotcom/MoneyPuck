@@ -1,8 +1,8 @@
 """Phase 3: Smart risk management tests."""
 
-from app.agents import LineShoppingAgent, RiskAgent
-from app.math_utils import confidence_adjusted_kelly, fractional_kelly
-from app.models import TrackerConfig, ValueCandidate
+from app.core.agents import LineShoppingAgent, RiskAgent
+from app.math.math_utils import confidence_adjusted_kelly, fractional_kelly
+from app.core.models import TrackerConfig, ValueCandidate
 
 
 def test_fractional_kelly_half():

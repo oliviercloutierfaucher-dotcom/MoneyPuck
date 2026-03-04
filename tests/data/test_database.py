@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from app.database import TrackerDatabase
-from app.models import ValueCandidate
+from app.data.database import TrackerDatabase
+from app.core.models import ValueCandidate
 
 
 # ---------------------------------------------------------------------------

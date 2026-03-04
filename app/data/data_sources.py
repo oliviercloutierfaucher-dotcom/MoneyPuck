@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from .logging_config import get_logger
+from app.logging_config import get_logger
 
 log = get_logger("data_sources")
 

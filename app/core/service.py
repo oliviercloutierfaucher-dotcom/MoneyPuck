@@ -4,10 +4,10 @@ import concurrent.futures
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from .agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgent, RiskAgent, TeamStrengthAgent
-from .logging_config import get_logger
-from .models import MarketSnapshot, TrackerConfig
-from .nhl_api import fetch_goalie_stats
+from app.core.agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgent, RiskAgent, TeamStrengthAgent
+from app.logging_config import get_logger
+from app.core.models import MarketSnapshot, TrackerConfig
+from app.data.nhl_api import fetch_goalie_stats
 
 log = get_logger("service")
 
@@ -126,7 +126,7 @@ def _persist_recommendations(
     profile: str = "default",
 ) -> None:
     """Save recommendations to the tracker database."""
-    from .database import TrackerDatabase
+    from app.data.database import TrackerDatabase
 
     try:
         with TrackerDatabase() as db:

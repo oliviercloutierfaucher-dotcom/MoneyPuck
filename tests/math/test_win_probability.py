@@ -1,11 +1,11 @@
 """Phase 2: Win probability model tests."""
 
-from app.agents import EdgeScoringAgent
-from app.math_utils import (
+from app.core.agents import EdgeScoringAgent
+from app.math.math_utils import (
     logistic_win_probability,
     prediction_confidence,
 )
-from app.models import TeamMetrics
+from app.core.models import TeamMetrics
 
 
 def test_logistic_equal_strength_no_home_ice():

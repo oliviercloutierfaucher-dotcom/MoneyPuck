@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.validation import (
+from app.math.validation import (
     brier_score,
     calibration_buckets,
     closing_line_value,

@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from app.situational import (
+from app.math.situational import (
     TEAM_TIMEZONE,
     detect_rest_days,
     is_back_to_back,

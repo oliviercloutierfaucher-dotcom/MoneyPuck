@@ -1,5 +1,5 @@
-from app.models import ValueCandidate
-from app.presentation import render_html_preview, to_serializable
+from app.core.models import ValueCandidate
+from app.web.presentation import render_html_preview, to_serializable
 
 
 def test_to_serializable_and_html_preview():

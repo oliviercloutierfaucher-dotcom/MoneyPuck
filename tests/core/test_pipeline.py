@@ -1,5 +1,5 @@
-from app.agents import EdgeScoringAgent, RiskAgent
-from app.models import TeamMetrics, TrackerConfig
+from app.core.agents import EdgeScoringAgent, RiskAgent
+from app.core.models import TeamMetrics, TrackerConfig
 
 
 def test_edge_pipeline_minimal_event():

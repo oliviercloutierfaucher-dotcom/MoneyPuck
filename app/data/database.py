@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .logging_config import get_logger
+from app.logging_config import get_logger
 
 log = get_logger("database")
 

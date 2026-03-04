@@ -1,5 +1,5 @@
-from app.army import ARMY_PROFILES, run_agent_army
-from app.models import TrackerConfig, ValueCandidate
+from app.core.army import ARMY_PROFILES, run_agent_army
+from app.core.models import TrackerConfig, ValueCandidate
 
 
 def test_army_runs_profiles_from_single_snapshot(monkeypatch):
@@ -27,8 +27,8 @@ def test_army_runs_profiles_from_single_snapshot(monkeypatch):
         )
         return [{"candidate": candidate, "recommended_stake": 25.0, "stake_fraction": 0.025}]
 
-    monkeypatch.setattr("app.army.build_market_snapshot", fake_snapshot)
-    monkeypatch.setattr("app.army.score_snapshot", fake_score)
+    monkeypatch.setattr("app.core.army.build_market_snapshot", fake_snapshot)
+    monkeypatch.setattr("app.core.army.score_snapshot", fake_score)
 
     cfg = TrackerConfig(odds_api_key="x")
     results = run_agent_army(cfg)

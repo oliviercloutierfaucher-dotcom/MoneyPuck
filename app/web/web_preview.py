@@ -7,18 +7,18 @@ import random
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .data_sources import get_books_for_region, QUEBEC_BOOKS, team_code, TEAM_NAME_TO_CODE
-from .polymarket import fetch_nhl_events, fetch_nhl_series_id, match_polymarket_to_games
-from .logging_config import get_logger, setup_logging
-from .math_utils import (
+from app.data.data_sources import get_books_for_region, QUEBEC_BOOKS, team_code, TEAM_NAME_TO_CODE
+from app.data.polymarket import fetch_nhl_events, fetch_nhl_series_id, match_polymarket_to_games
+from app.logging_config import get_logger, setup_logging
+from app.math.math_utils import (
     american_to_decimal,
     american_to_implied_probability,
     goalie_matchup_adjustment,
     logistic_win_probability,
 )
-from .models import TrackerConfig, ValueCandidate
-from .presentation import render_dashboard, render_html_preview, to_serializable
-from .service import build_market_snapshot, score_snapshot
+from app.core.models import TrackerConfig, ValueCandidate
+from app.web.presentation import render_dashboard, render_html_preview, to_serializable
+from app.core.service import build_market_snapshot, score_snapshot
 
 log = get_logger("web_preview")
 
@@ -647,7 +647,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     body = json.dumps(data["value_bets"], indent=2).encode("utf-8")
                 else:
                     config = _build_config(params)
-                    from .service import run_tracker
+                    from app.core.service import run_tracker
                     recommendations = run_tracker(config)
                     body = json.dumps(to_serializable(recommendations), indent=2).encode("utf-8")
                 self.send_response(200)
