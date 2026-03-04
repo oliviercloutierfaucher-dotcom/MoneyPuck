@@ -779,6 +779,8 @@ function renderArbs(arbs) {{
   }}
   grid.innerHTML = arbs.map(a => {{
     const game = a.away_team + ' @ ' + a.home_team;
+    const dollarA = (a.stake_a_pct).toFixed(2);
+    const dollarB = (a.stake_b_pct).toFixed(2);
     return `
       <div class="arb-card">
         <div class="arb-title">ARB: ${{a.market}}</div>
@@ -787,13 +789,13 @@ function renderArbs(arbs) {{
           <span class="leg-side">${{a.side_a}}</span>
           <span class="leg-book">${{a.side_a_book}}</span>
           <span class="leg-odds">${{n(a.side_a_odds)}}</span>
-          <span class="leg-stake">$${{n(a.stake_a_pct)}}</span>
+          <span class="leg-stake">${{n(a.stake_a_pct, 1)}}% ($${{dollarA}})</span>
         </div>
         <div class="arb-leg">
           <span class="leg-side">${{a.side_b}}</span>
           <span class="leg-book">${{a.side_b_book}}</span>
           <span class="leg-odds">${{n(a.side_b_odds)}}</span>
-          <span class="leg-stake">$${{n(a.stake_b_pct)}}</span>
+          <span class="leg-stake">${{n(a.stake_b_pct, 1)}}% ($${{dollarB}})</span>
         </div>
         <div class="arb-profit">
           <span class="profit-label">Per $100 wagered</span>
