@@ -97,6 +97,31 @@ def render_dashboard(data: dict[str, Any]) -> str:
       --radius-sm: 8px;
       --radius-lg: 16px;
     }}
+    [data-theme="light"] {{
+      --bg: #f8fafc;
+      --bg-2: #ffffff;
+      --panel: rgba(255,255,255,0.9);
+      --panel-solid: #ffffff;
+      --panel-2: #f1f5f9;
+      --panel-3: #e2e8f0;
+      --text: #0f172a;
+      --text-2: #475569;
+      --muted: #64748b;
+      --accent: #0891b2;
+      --accent-2: #06b6d4;
+      --accent-glow: rgba(8,145,178,0.1);
+      --green: #059669;
+      --green-bg: rgba(5,150,105,0.06);
+      --green-border: rgba(5,150,105,0.2);
+      --green-glow: rgba(5,150,105,0.08);
+      --red: #dc2626;
+      --amber: #d97706;
+      --amber-bg: rgba(217,119,6,0.06);
+      --border: rgba(226,232,240,0.8);
+      --border-2: rgba(203,213,225,0.6);
+      --shadow: 0 4px 24px rgba(0,0,0,0.06);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,0.1);
+    }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -552,6 +577,24 @@ def render_dashboard(data: dict[str, Any]) -> str:
       border-radius: 4px; border: 1px solid var(--border); font-size: 11px;
     }}
 
+    /* ---- THEME TOGGLE ---- */
+    .theme-toggle {{
+      background: var(--panel-solid); border: 1px solid var(--border-2);
+      border-radius: 20px; padding: 5px 12px; font-size: 13px;
+      cursor: pointer; transition: all 0.2s; color: var(--text-2);
+      display: inline-flex; align-items: center; gap: 5px;
+      font-family: inherit; font-weight: 600;
+    }}
+    .theme-toggle:hover {{ border-color: var(--accent); color: var(--accent); }}
+    [data-theme="light"] .loading-overlay {{ background: rgba(248,250,252,0.85); }}
+    [data-theme="light"] .modal-backdrop {{ background: rgba(0,0,0,0.3); }}
+    [data-theme="light"] .logo {{ color: #fff; }}
+    [data-theme="light"] .btn {{ color: #fff; }}
+    [data-theme="light"] .play-action {{ color: #fff; }}
+    [data-theme="light"] .top-bet-row .rank {{ color: #fff; }}
+    [data-theme="light"] .value-table tr:nth-child(even) td {{ background: rgba(241,245,249,0.5); }}
+    [data-theme="light"] .value-table tr:hover td {{ background: rgba(8,145,178,0.06); }}
+
     /* ---- RESPONSIVE ---- */
     @media (max-width: 768px) {{
       .app {{ padding: 0 12px 24px; }}
@@ -588,6 +631,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     </div>
     <div class="header-actions">
       <div class="badge" id="mode-badge">DEMO</div>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">Light</button>
       <button class="btn btn-ghost" onclick="refreshDashboard(true)">Demo</button>
       <button class="btn" id="btn-refresh" onclick="refreshDashboard()">Refresh</button>
     </div>
@@ -709,6 +753,23 @@ def render_dashboard(data: dict[str, Any]) -> str:
 const D = JSON.parse(document.getElementById('app-data').textContent);
 function esc(s){{const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}}
 function bookLink(name, url){{if(url)return '<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(name)+'</a>';return esc(name);}}
+function toggleTheme() {{
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  const btn = document.getElementById('theme-toggle');
+  btn.textContent = next === 'dark' ? 'Light' : 'Dark';
+  try {{ localStorage.setItem('mp_theme', next); }} catch(e) {{}}
+}}
+(function() {{
+  try {{
+    const saved = localStorage.getItem('mp_theme');
+    if (saved === 'light') {{
+      document.documentElement.setAttribute('data-theme', 'light');
+    }}
+  }} catch(e) {{}}
+}})();
 let activeBooks = new Set((D.books || []).map(b => b));
 let currentData = D;
 let currentFilteredGames = [];
@@ -752,6 +813,8 @@ function currentNhlSeason() {{
 function init() {{
   const seasonEl = document.getElementById('ctl-season');
   if (!seasonEl.value) seasonEl.value = currentNhlSeason();
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  document.getElementById('theme-toggle').textContent = theme === 'dark' ? 'Light' : 'Dark';
   restorePrefs();
   renderBooks(D.books || []);
   render(D);

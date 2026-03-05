@@ -213,6 +213,7 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
                         "side": side,
                         "market": "ML",
                         "sportsbook": bk_name,
+                        "sportsbook_url": build_sportsbook_url(bk_key),
                         "american_odds": odds,
                         "decimal_odds": round(dec_odds, 2),
                         "implied_probability": round(impl_p, 4),
@@ -658,7 +659,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com",
         )
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
 
