@@ -612,6 +612,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     <div class="kpi green"><div class="kpi-label">Avg Edge</div><div class="kpi-value" id="kpi-edge">0pp</div><div class="kpi-sub">probability points</div></div>
     <div class="kpi"><div class="kpi-label">Best Edge</div><div class="kpi-value" id="kpi-best">0pp</div></div>
     <div class="kpi"><div class="kpi-label">Total Stake</div><div class="kpi-value" id="kpi-stake">$0</div></div>
+    <div class="kpi" style="border-color:var(--amber)"><div class="kpi-label" style="color:var(--amber)">Polymarket</div><div class="kpi-value" id="kpi-poly">-</div><div class="kpi-sub" id="kpi-poly-sub">games matched</div></div>
   </div>
 
   <!-- BANKROLL METER -->
@@ -736,6 +737,10 @@ function init() {{
   ['ctl-region','ctl-bankroll','ctl-min-edge','ctl-min-ev'].forEach(id => {{
     document.getElementById(id).addEventListener('change', savePrefs);
   }});
+  // Auto-refresh to live data if initial load was demo
+  if (D.mode !== 'live') {{
+    refreshDashboard(false);
+  }}
 }}
 
 function renderBooks(books) {{
@@ -788,6 +793,17 @@ function render(data) {{
   document.getElementById('kpi-edge').textContent = '+' + n(avgEdge) + 'pp';
   document.getElementById('kpi-best').textContent = '+' + n(bestEdge) + 'pp';
   document.getElementById('kpi-stake').textContent = '$' + n(totalStake);
+
+  // Polymarket KPI
+  const polyGames = games.filter(g => g.poly_home_prob);
+  const polyCount = polyGames.length;
+  document.getElementById('kpi-poly').textContent = polyCount > 0 ? polyCount + '/' + games.length : '-';
+  if (polyCount > 0) {{
+    const avgPolyEdge = polyGames.reduce((a, g) => a + Math.abs(g.home_prob - g.poly_home_prob) * 100, 0) / polyCount;
+    document.getElementById('kpi-poly-sub').textContent = 'avg ' + n(avgPolyEdge, 1) + 'pp diff';
+  }} else {{
+    document.getElementById('kpi-poly-sub').textContent = 'no data';
+  }}
 
   // Mode badge
   const badge = document.getElementById('mode-badge');
@@ -901,12 +917,21 @@ function renderGameCard(g, bets, idx) {{
   if (g.books && g.books.length) {{
     const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
     const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
-    const polyLine = g.poly_home_prob ? ` &middot; <span style="color:var(--amber)">Poly: ${{esc(g.home)}} ${{pct(g.poly_home_prob)}}</span>` : '';
-    bestLine = `<div style="padding:8px 18px 14px;font-size:12px;color:var(--text-2)">
+    let polyLine = '';
+    if (g.poly_home_prob) {{
+      const polyDiff = ((g.home_prob - g.poly_home_prob) * 100).toFixed(1);
+      const polySign = polyDiff > 0 ? '+' : '';
+      const polyCol = Math.abs(polyDiff) >= 3 ? (polyDiff > 0 ? 'var(--green)' : 'var(--red, #ef4444)') : 'var(--amber)';
+      polyLine = `<div style="padding:2px 18px 10px;font-size:12px;color:var(--amber)">
+        Polymarket: ${{esc(g.home)}} ${{(g.poly_home_prob*100).toFixed(1)}}% &middot; ${{esc(g.away)}} ${{(g.poly_away_prob*100).toFixed(1)}}%
+        &middot; <span style="color:${{polyCol}};font-weight:600">Model ${{polySign}}${{polyDiff}}pp vs Poly</span>
+      </div>`;
+    }}
+    bestLine = `<div style="padding:8px 18px 4px;font-size:12px;color:var(--text-2)">
       Best ML: <strong>${{esc(g.home)}} ${{dec(bestH)}}</strong> &middot;
       <strong>${{esc(g.away)}} ${{dec(bestA)}}</strong>
-      &middot; ${{g.books.length}} books${{polyLine}}
-    </div>`;
+      &middot; ${{g.books.length}} books
+    </div>${{polyLine}}`;
   }}
 
   return `
