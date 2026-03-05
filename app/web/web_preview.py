@@ -750,8 +750,8 @@ def _load_dotenv() -> None:
 def main() -> None:
     _load_dotenv()
     setup_logging()
-    host = os.getenv("PREVIEW_HOST", "127.0.0.1")
-    port = int(os.getenv("PREVIEW_PORT", "8080"))
+    host = os.getenv("PREVIEW_HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", os.getenv("PREVIEW_PORT", "8080")))
     server = ThreadingHTTPServer((host, port), PreviewHandler)
     log.info("Preview server starting on http://%s:%d", host, port)
     print(f"\n  MoneyPuck Edge Intelligence Dashboard")
