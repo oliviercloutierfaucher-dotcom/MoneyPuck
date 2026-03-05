@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -76,7 +77,7 @@ def _build_config(params: dict[str, list[str]]) -> TrackerConfig:
         odds_api_key=api_key,
         region=api_region,
         bookmakers=bookmaker_keys,
-        season=_int_param(params, "season", 2024),
+        season=_int_param(params, "season", datetime.now().year if datetime.now().month >= 10 else datetime.now().year - 1),
         min_edge=max(0.0, _float_param(params, "min_edge", 2.0)),
         min_ev=max(0.0, _float_param(params, "min_ev", 0.02)),
         bankroll=bankroll,
@@ -732,7 +733,22 @@ class PreviewHandler(BaseHTTPRequestHandler):
         log.info(format, *args)
 
 
+def _load_dotenv() -> None:
+    """Load .env file from project root if it exists."""
+    env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip())
+    except FileNotFoundError:
+        pass
+
+
 def main() -> None:
+    _load_dotenv()
     setup_logging()
     host = os.getenv("PREVIEW_HOST", "127.0.0.1")
     port = int(os.getenv("PREVIEW_PORT", "8080"))

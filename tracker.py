@@ -7,7 +7,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 
 from app.core.army import run_agent_army
 from app.logging_config import get_logger, setup_logging
@@ -20,12 +20,22 @@ log = get_logger("cli")
 SUPPORTED_REGIONS = {"ca", "us"}
 
 
+def _current_nhl_season() -> int:
+    """Return the current NHL season start year (e.g. 2025 for the 2025-26 season).
+
+    The NHL season runs roughly October to June, so before October we're
+    still in the previous season.
+    """
+    now = datetime.now()
+    return now.year if now.month >= 10 else now.year - 1
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NHL edge tracker (MoneyPuck vs market)")
     parser.add_argument("--odds-api-key", default=os.getenv("ODDS_API_KEY"), help="The Odds API key")
     parser.add_argument("--region", default="ca", choices=sorted(SUPPORTED_REGIONS))
     parser.add_argument("--bookmakers", default="", help="Optional comma-separated bookmaker keys")
-    parser.add_argument("--season", type=int, default=2024)
+    parser.add_argument("--season", type=int, default=_current_nhl_season())
     parser.add_argument("--min-edge", type=float, default=2.0)
     parser.add_argument("--min-ev", type=float, default=0.02)
     parser.add_argument("--bankroll", type=float, default=1000.0)
@@ -156,7 +166,22 @@ def _print_tonight(recommendations: list[dict[str, object]], snapshot, config: T
     print()
 
 
+def _load_dotenv() -> None:
+    """Load .env file from project root if it exists."""
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip())
+    except FileNotFoundError:
+        pass
+
+
 def main() -> int:
+    _load_dotenv()
     args = parse_args()
     setup_logging(args.log_level)
 

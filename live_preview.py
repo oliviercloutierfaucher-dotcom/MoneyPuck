@@ -12,6 +12,7 @@ import argparse
 import os
 import random
 import sys
+from datetime import datetime
 
 from app.logging_config import setup_logging, get_logger
 from app.core.agents import TeamStrengthAgent, EdgeScoringAgent, RiskAgent
@@ -239,7 +240,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Live MoneyPuck model preview")
     parser.add_argument("--odds-api-key", default=os.getenv("ODDS_API_KEY", ""))
     parser.add_argument("--region", default="ca")
-    parser.add_argument("--season", type=int, default=2024)
+    now = datetime.now()
+    current_season = now.year if now.month >= 10 else now.year - 1
+    parser.add_argument("--season", type=int, default=current_season)
     parser.add_argument("--log-level", default="WARNING")
     parser.add_argument("--demo", action="store_true",
                         help="Use demo data (no network required)")

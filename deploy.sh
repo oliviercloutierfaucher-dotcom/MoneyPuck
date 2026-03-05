@@ -75,9 +75,11 @@ echo
 echo -e "${BOLD}[5/5] Running first prediction cycle...${NC}"
 echo
 if [ -n "${ODDS_API_KEY:-}" ]; then
-    $PY live_preview.py --region ca
+    $PY tracker.py --tonight --region ca
 else
-    $PY live_preview.py --demo
+    echo -e "  ${YELLOW}No API key — launching web dashboard in demo mode${NC}"
+    echo -e "  ${GREEN}Open http://localhost:8080?demo=1${NC}"
+    $PY -m app.web.web_preview
 fi
 
 echo
@@ -86,11 +88,11 @@ echo -e "${BOLD}  Deploy complete!${NC}"
 echo -e "${BOLD}========================================${NC}"
 echo
 echo -e "Quick commands:"
-echo -e "  ${GREEN}python live_preview.py${NC}                    # Live preview"
+echo -e "  ${GREEN}python -m app.web.web_preview${NC}             # Web dashboard"
 echo -e "  ${GREEN}python tracker.py --tonight${NC}               # Tonight's bets"
 echo -e "  ${GREEN}python tracker.py --tonight --json${NC}        # JSON output (for bots)"
 echo -e "  ${GREEN}python tracker.py --army${NC}                  # 5 strategy profiles"
-echo -e "  ${GREEN}python -m app.web.web_preview${NC}              # Web dashboard"
+echo -e "  ${GREEN}python live_preview.py${NC}                    # CLI power rankings preview"
 echo
 echo -e "Tuning:"
 echo -e "  ${GREEN}--bankroll 5000${NC}         Your bankroll"
