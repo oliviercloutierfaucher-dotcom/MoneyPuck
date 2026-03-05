@@ -6,9 +6,17 @@ from typing import Any
 
 
 def to_serializable(recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from app.web.deep_links import build_sportsbook_url
+
     rows: list[dict[str, Any]] = []
     for item in recommendations:
         candidate = item["candidate"]
+        sportsbook_url = build_sportsbook_url(
+            getattr(candidate, "sportsbook_key", ""),
+            candidate.home_team,
+            candidate.away_team,
+            candidate.commence_time_utc,
+        )
         rows.append(
             {
                 "commence_time_utc": candidate.commence_time_utc,
@@ -16,6 +24,7 @@ def to_serializable(recommendations: list[dict[str, Any]]) -> list[dict[str, Any
                 "away_team": candidate.away_team,
                 "side": candidate.side,
                 "sportsbook": candidate.sportsbook,
+                "sportsbook_url": sportsbook_url,
                 "american_odds": candidate.american_odds,
                 "implied_probability": round(candidate.implied_probability, 4),
                 "model_probability": round(candidate.model_probability, 4),
@@ -675,6 +684,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
 <script>
 const D = JSON.parse(document.getElementById('app-data').textContent);
 function esc(s){{const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}}
+function bookLink(name, url){{if(url)return `<a href="${{esc(url)}}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${{esc(name)}}</a>`;return esc(name);}}
 let activeBooks = new Set((D.books || []).map(b => b));
 let currentData = D;
 let currentFilteredGames = [];
@@ -826,7 +836,7 @@ function renderPlays(bets) {{
         <div class="play-action">BET ${{esc(b.side)}} ${{esc(b.market || 'ML')}}</div>
         <div class="play-game">${{game}}</div>
         <div class="play-details">
-          <div><div class="detail-label">Book</div><div class="detail-value">${{esc(b.sportsbook)}}</div></div>
+          <div><div class="detail-label">Book</div><div class="detail-value">${{bookLink(b.sportsbook, b.sportsbook_url)}}</div></div>
           <div><div class="detail-label">Odds</div><div class="detail-value">${{odds}}</div></div>
           <div><div class="detail-label">Stake</div><div class="detail-value green">$${{n(b.recommended_stake)}}</div></div>
           <div><div class="detail-label">Edge</div><div class="detail-value green">+${{n(b.edge_probability_points)}}pp</div></div>
@@ -854,13 +864,13 @@ function renderArbs(arbs) {{
         <div class="arb-game">${{game}}</div>
         <div class="arb-leg">
           <span class="leg-side">${{esc(a.side_a)}}</span>
-          <span class="leg-book">${{esc(a.side_a_book)}}</span>
+          <span class="leg-book">${{bookLink(a.side_a_book, a.side_a_url)}}</span>
           <span class="leg-odds">${{n(a.side_a_odds)}}</span>
           <span class="leg-stake">${{n(a.stake_a_pct, 1)}}% ($${{dollarA}})</span>
         </div>
         <div class="arb-leg">
           <span class="leg-side">${{esc(a.side_b)}}</span>
-          <span class="leg-book">${{esc(a.side_b_book)}}</span>
+          <span class="leg-book">${{bookLink(a.side_b_book, a.side_b_url)}}</span>
           <span class="leg-odds">${{n(a.side_b_odds)}}</span>
           <span class="leg-stake">${{n(a.stake_b_pct, 1)}}% ($${{dollarB}})</span>
         </div>
@@ -976,7 +986,7 @@ function openGameModal(idx) {{
         const hE = b.home_edge || 0, aE = b.away_edge || 0;
         const best = Math.max(hE, aE);
         return `<tr>
-          <td style="font-weight:600;color:var(--text-2)">${{esc(b.name)}}</td>
+          <td style="font-weight:600;color:var(--text-2)">${{bookLink(b.name, b.url)}}</td>
           <td class="odds">${{b.home_odds === bestH ? '<span class="best-star">' : ''}}\
 ${{dec(b.home_odds)}}${{b.home_odds === bestH ? ' &#9733;</span>' : ''}}</td>
           <td class="odds">${{b.away_odds === bestA ? '<span class="best-star">' : ''}}\
@@ -999,7 +1009,7 @@ ${{dec(b.away_odds)}}${{b.away_odds === bestA ? ' &#9733;</span>' : ''}}</td>
     spreadHtml = `<table>
       <tr><th>Book</th><th>${{esc(g.home)}} ${{spread}}</th><th>${{esc(g.away)}} ${{-spread}}</th></tr>
       ${{sb.map(b => `<tr>
-        <td style="font-weight:600;color:var(--text-2)">${{esc(b.name)}}</td>
+        <td style="font-weight:600;color:var(--text-2)">${{bookLink(b.name, b.url)}}</td>
         <td class="odds">${{b.home_spread_odds === bestHS ? '<span class="best-star">' : ''}}\
 ${{dec(b.home_spread_odds)}}${{b.home_spread_odds === bestHS ? ' &#9733;</span>' : ''}}</td>
         <td class="odds">${{b.away_spread_odds === bestAS ? '<span class="best-star">' : ''}}\
@@ -1017,7 +1027,7 @@ ${{dec(b.away_spread_odds)}}${{b.away_spread_odds === bestAS ? ' &#9733;</span>'
     totalHtml = `<table>
       <tr><th>Book</th><th>Over ${{line}}</th><th>Under ${{line}}</th></tr>
       ${{tb.map(b => `<tr>
-        <td style="font-weight:600;color:var(--text-2)">${{esc(b.name)}}</td>
+        <td style="font-weight:600;color:var(--text-2)">${{bookLink(b.name, b.url)}}</td>
         <td class="odds">${{b.over_odds === bestO ? '<span class="best-star">' : ''}}\
 ${{dec(b.over_odds)}}${{b.over_odds === bestO ? ' &#9733;</span>' : ''}}</td>
         <td class="odds">${{b.under_odds === bestU ? '<span class="best-star">' : ''}}\
@@ -1159,7 +1169,7 @@ function renderBets(bets) {{
       <td>${{i+1}}</td>
       <td>${{game}}</td>
       <td style="font-weight:700">${{esc(b.side)}} ${{esc(b.market || 'ML')}}</td>
-      <td>${{esc(b.sportsbook)}}</td>
+      <td>${{bookLink(b.sportsbook, b.sportsbook_url)}}</td>
       <td class="odds-col">${{odds}}</td>
       <td>${{pct(b.implied_probability)}}</td>
       <td style="font-weight:600">${{pct(b.model_probability)}}</td>

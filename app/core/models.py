@@ -57,6 +57,7 @@ class ValueCandidate:
     expected_value_per_dollar: float
     kelly_fraction: float
     confidence: float = 1.0
+    sportsbook_key: str = ""
 
 
 @dataclass(frozen=True)

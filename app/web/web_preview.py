@@ -176,9 +176,11 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
             under_odds = max(-130, min(-100, under_odds))
             over_odds = over_base
 
+            from app.web.deep_links import build_sportsbook_url
             game_books.append({
                 "name": bk_name,
                 "key": bk_key,
+                "url": build_sportsbook_url(bk_key),
                 "home_odds": h_odds,
                 "away_odds": a_odds,
                 "home_implied": round(h_implied, 4),
@@ -310,7 +312,7 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
         for b in books:
             h_dec = american_to_decimal(b["home_odds"])
             a_dec = american_to_decimal(b["away_odds"])
-            ml_sides.append((b["name"], home, h_dec, away, a_dec))
+            ml_sides.append((b["name"], home, h_dec, away, a_dec, b.get("url", "")))
 
         # Find best odds for each side
         best_home = max(ml_sides, key=lambda x: x[2])
@@ -326,9 +328,11 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
                 "market": "Moneyline",
                 "side_a": home,
                 "side_a_book": best_home[0],
+                "side_a_url": best_home[5],
                 "side_a_odds": round(best_home[2], 2),
                 "side_b": away,
                 "side_b_book": best_away[0],
+                "side_b_url": best_away[5],
                 "side_b_odds": round(best_away[4], 2),
                 "margin": round(margin, 4),
                 "profit_pct": round(profit, 2),
@@ -363,9 +367,11 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
                         "market": f"Spread {spread_val}",
                         "side_a": f"{home} {spread_val}",
                         "side_a_book": best_hs[0],
+                        "side_a_url": best_hs[1].get("url", ""),
                         "side_a_odds": round(hs_dec, 2),
                         "side_b": f"{away} {-spread_val}",
                         "side_b_book": best_as[0],
+                        "side_b_url": best_as[1].get("url", ""),
                         "side_b_odds": round(as_dec, 2),
                         "margin": round(sp_margin, 4),
                         "profit_pct": round(profit, 2),
@@ -398,9 +404,11 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
                         "market": f"Total {line}",
                         "side_a": f"Over {line}",
                         "side_a_book": best_over[0],
+                        "side_a_url": best_over[1].get("url", ""),
                         "side_a_odds": round(o_dec, 2),
                         "side_b": f"Under {line}",
                         "side_b_book": best_under[0],
+                        "side_b_url": best_under[1].get("url", ""),
                         "side_b_odds": round(u_dec, 2),
                         "margin": round(t_margin, 4),
                         "profit_pct": round(profit, 2),
@@ -503,8 +511,10 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             h_imp = american_to_implied_probability(h_odds)
             a_imp = american_to_implied_probability(a_odds)
 
+            from app.web.deep_links import build_sportsbook_url
             book_entry = {
                 "name": display_name,
+                "url": build_sportsbook_url(bm_key, home, away, commence),
                 "home_odds": h_odds,
                 "away_odds": a_odds,
                 "home_implied": round(h_imp, 4),
@@ -620,6 +630,7 @@ def _extract_value_bets_from_games(
                     "side": side,
                     "market": "ML",
                     "sportsbook": b["name"],
+                    "sportsbook_url": b.get("url", ""),
                     "american_odds": odds,
                     "decimal_odds": round(dec_odds, 2),
                     "implied_probability": round(implied, 4),

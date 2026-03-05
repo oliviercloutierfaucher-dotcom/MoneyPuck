@@ -699,6 +699,7 @@ class EdgeScoringAgent:
                                     away_team=away_team,
                                     side=side,
                                     sportsbook=bookmaker.get("title", "unknown"),
+                                    sportsbook_key=bookmaker.get("key", ""),
                                     american_odds=price,
                                     decimal_odds=decimal_odds,
                                     implied_probability=implied,

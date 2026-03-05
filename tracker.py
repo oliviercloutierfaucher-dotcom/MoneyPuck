@@ -82,6 +82,8 @@ def _validate_args(args: argparse.Namespace) -> str | None:
 
 
 def _print_human(recommendations: list[dict[str, object]], config: TrackerConfig | None = None) -> None:
+    from app.web.deep_links import build_sportsbook_url
+
     if not recommendations:
         print("No value bets found with current thresholds.")
         return
@@ -93,6 +95,7 @@ def _print_human(recommendations: list[dict[str, object]], config: TrackerConfig
           f"{'Market':>7} {'Model':>7} {'Edge':>7} {'EV/$':>6} {'Stake':>8} {'Conf':>5}")
     print("-" * 100)
     total_stake = 0.0
+    links: list[tuple[str, str, str]] = []  # (game, book, url)
     for item in recommendations:
         c = item["candidate"]
         game = f"{c.away_team} @ {c.home_team}"
@@ -105,8 +108,19 @@ def _print_human(recommendations: list[dict[str, object]], config: TrackerConfig
             f"{c.expected_value_per_dollar:>5.3f} ${item['recommended_stake']:>7.2f} "
             f"{c.confidence:>4.0%}"
         )
+        url = build_sportsbook_url(
+            getattr(c, "sportsbook_key", ""),
+            c.home_team, c.away_team, c.commence_time_utc,
+        )
+        if url:
+            links.append((game, c.sportsbook, url))
     print()
     print(f"Total stake: ${total_stake:,.2f} ({total_stake/bankroll:.1%} of bankroll)")
+
+    if links:
+        print(f"\n  Quick links:")
+        for game, book, url in links:
+            print(f"    {book:<14} {url}")
 
 
 def _print_tonight(recommendations: list[dict[str, object]], snapshot, config: TrackerConfig) -> None:
