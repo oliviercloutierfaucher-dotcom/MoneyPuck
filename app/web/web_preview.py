@@ -346,7 +346,7 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
         best_home = max(ml_sides, key=lambda x: x[2])
         best_away = max(ml_sides, key=lambda x: x[4])
         margin = 1 / best_home[2] + 1 / best_away[4]
-        if margin < 1.0:
+        if margin < 1.0 and best_home[0] != best_away[0]:
             profit = (1 / margin - 1) * 100
             stake_a = (1 / best_home[2]) / (1 / best_home[2] + 1 / best_away[4]) * 100
             stake_b = 100 - stake_a
@@ -387,7 +387,7 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
                 hs_dec = american_to_decimal(best_hs[1]["home_spread_odds"])
                 as_dec = american_to_decimal(best_as[1]["away_spread_odds"])
                 sp_margin = 1 / hs_dec + 1 / as_dec
-                if sp_margin < 1.0:
+                if sp_margin < 1.0 and best_hs[0] != best_as[0]:
                     profit = (1 / sp_margin - 1) * 100
                     sa = (1 / hs_dec) / (1 / hs_dec + 1 / as_dec) * 100
                     arbs.append({
@@ -424,7 +424,7 @@ def _detect_arbs(games: list[dict]) -> list[dict]:
                 o_dec = american_to_decimal(best_over[1]["over_odds"])
                 u_dec = american_to_decimal(best_under[1]["under_odds"])
                 t_margin = 1 / o_dec + 1 / u_dec
-                if t_margin < 1.0:
+                if t_margin < 1.0 and best_over[0] != best_under[0]:
                     profit = (1 / t_margin - 1) * 100
                     sa = (1 / o_dec) / (1 / o_dec + 1 / u_dec) * 100
                     arbs.append({

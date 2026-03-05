@@ -86,6 +86,24 @@ class TestMoneylineArbs:
         arbs = find_arbitrages([_make_event(bookmakers=[])])
         assert arbs == []
 
+    def test_same_book_ml_rejected(self):
+        """Both sides from same book → no arb even if margin < 1."""
+        event = _make_event(bookmakers=[
+            _make_bookmaker("a", "Book A", [_h2h_market([("Team A", 200), ("Team B", 200)])]),
+            _make_bookmaker("a", "Book A", [_h2h_market([("Team A", 200), ("Team B", 200)])]),
+        ])
+        arbs = find_arbitrages([event])
+        assert len(arbs) == 0
+
+    def test_same_book_near_arb_rejected(self):
+        """Near-arb on same book rejected too."""
+        event = _make_event(bookmakers=[
+            _make_bookmaker("a", "Book A", [_h2h_market([("Team A", 105), ("Team B", 105)])]),
+            _make_bookmaker("a", "Book A", [_h2h_market([("Team A", 105), ("Team B", 105)])]),
+        ])
+        near = find_near_arbs([event])
+        assert len(near) == 0
+
     def test_arb_sorted_by_profit(self):
         """Multiple events, results sorted by profit descending."""
         event1 = _make_event(home="A", away="B", bookmakers=[

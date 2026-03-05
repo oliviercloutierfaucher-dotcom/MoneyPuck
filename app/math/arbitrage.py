@@ -171,7 +171,7 @@ def find_arbitrages(odds_events: list[dict[str, Any]]) -> list[ArbOpportunity]:
             best_home = max(home_sides, key=lambda x: x[1])
             best_away = max(away_sides, key=lambda x: x[1])
             m = _margin(best_home[1], best_away[1])
-            if m < 1.0:
+            if m < 1.0 and best_home[0] != best_away[0]:
                 sa, sb = _stake_split(best_home[1], best_away[1])
                 arbs.append({
                     "home_team": home, "away_team": away,
@@ -198,7 +198,7 @@ def find_arbitrages(odds_events: list[dict[str, Any]]) -> list[ArbOpportunity]:
                 best_fav = max(fav, key=lambda x: x[1])
                 best_dog = max(dog, key=lambda x: x[1])
                 m = _margin(best_fav[1], best_dog[1])
-                if m < 1.0:
+                if m < 1.0 and best_fav[0] != best_dog[0]:
                     sa, sb = _stake_split(best_fav[1], best_dog[1])
                     arbs.append({
                         "home_team": home, "away_team": away,
@@ -225,7 +225,7 @@ def find_arbitrages(odds_events: list[dict[str, Any]]) -> list[ArbOpportunity]:
                 best_over = max(overs, key=lambda x: x[1])
                 best_under = max(unders, key=lambda x: x[1])
                 m = _margin(best_over[1], best_under[1])
-                if m < 1.0:
+                if m < 1.0 and best_over[0] != best_under[0]:
                     sa, sb = _stake_split(best_over[1], best_under[1])
                     arbs.append({
                         "home_team": home, "away_team": away,
@@ -279,7 +279,7 @@ def find_near_arbs(
             best_home = max(home_sides, key=lambda x: x[1])
             best_away = max(away_sides, key=lambda x: x[1])
             m = _margin(best_home[1], best_away[1])
-            if 1.0 <= m < 1.0 + threshold:
+            if 1.0 <= m < 1.0 + threshold and best_home[0] != best_away[0]:
                 sa, sb = _stake_split(best_home[1], best_away[1])
                 vig_pct = (m - 1.0) * 100
                 near.append({

@@ -141,6 +141,51 @@ class TestKnownArb:
 
 
 # ---------------------------------------------------------------------------
+# b-1) Same-book arb rejection — can't arb on same platform
+# ---------------------------------------------------------------------------
+
+class TestSameBookRejection:
+    """Arb-looking odds on a SINGLE book must be rejected."""
+
+    def test_same_book_ml_rejected(self):
+        """Both sides best odds from same book → no arb."""
+        books = [
+            _make_book("Betway", home_odds=150, away_odds=100),
+        ]
+        arbs = _detect_arbs([_make_game(books=books)])
+        assert arbs == []
+
+    def test_same_book_spread_rejected(self):
+        """Spread arb where both sides best odds from same book."""
+        books = [
+            _make_book("Betway", home_odds=-110, away_odds=-110,
+                       home_spread=-1.5, away_spread=1.5,
+                       home_spread_odds=130, away_spread_odds=130),
+        ]
+        arbs = _detect_arbs([_make_game(books=books)])
+        assert arbs == []
+
+    def test_same_book_total_rejected(self):
+        """Total arb where both sides best odds from same book."""
+        books = [
+            _make_book("Betway", home_odds=-110, away_odds=-110,
+                       total_line=5.5, over_odds=130, under_odds=130),
+        ]
+        arbs = _detect_arbs([_make_game(books=books)])
+        assert arbs == []
+
+    def test_cross_book_still_works(self):
+        """Verify cross-book arbs still detected after the fix."""
+        books = [
+            _make_book("BookA", home_odds=150, away_odds=-200),
+            _make_book("BookB", home_odds=-150, away_odds=100),
+        ]
+        arbs = _detect_arbs([_make_game(books=books)])
+        assert len(arbs) == 1
+        assert arbs[0]["side_a_book"] != arbs[0]["side_b_book"]
+
+
+# ---------------------------------------------------------------------------
 # b) No arb scenario — tight odds (margin > 1.0)
 # ---------------------------------------------------------------------------
 
