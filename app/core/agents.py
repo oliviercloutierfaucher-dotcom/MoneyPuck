@@ -179,7 +179,12 @@ class TeamStrengthAgent:
         z_home = self._z_score_all(team_home_raw, teams, METRIC_KEYS)
         z_away = self._z_score_all(team_away_raw, teams, METRIC_KEYS)
 
-        # ---- 4. Regression to mean & composite ----
+        # ---- 4. Rolling window composites (5g, 10g, momentum) ----
+        rolling = self._compute_rolling_composites(
+            team_games, teams, regression_k,
+        )
+
+        # ---- 5. Regression to mean & composite ----
         # Build goalie lookup: team_code -> starter dict
         goalie_lookup: dict[str, dict[str, Any]] = {}
         if goalie_stats:
@@ -214,6 +219,7 @@ class TeamStrengthAgent:
             s_gaa = starter["gaa"] if starter else 0.0
 
             raw = team_raw[team]
+            roll = rolling.get(team, {})
             result[team] = TeamMetrics(
                 xg_share=raw.get("xg_share", 0.5),
                 corsi_share=raw.get("corsi_share", 0.5),
@@ -238,6 +244,10 @@ class TeamStrengthAgent:
                 away_strength=away_comp,
                 games_played=n,
                 composite=comp,
+                # Rolling windows
+                composite_5g=roll.get("composite_5g", 0.0),
+                composite_10g=roll.get("composite_10g", 0.0),
+                momentum=roll.get("momentum", 0.0),
                 starter_save_pct=s_save_pct,
                 starter_gaa=s_gaa,
             )
@@ -339,6 +349,7 @@ class TeamStrengthAgent:
 
             entry = {
                 "weight": weight,
+                "game_date": game_date,
                 "xg_share": xg_pct,
                 "corsi_share": corsi_pct,
                 "fenwick_share": fenwick_pct,
@@ -396,6 +407,7 @@ class TeamStrengthAgent:
 
             entry = {
                 "weight": weight,
+                "game_date": game_date,
                 "xg_share": xg_pct,
                 "corsi_share": corsi_pct,
                 "fenwick_share": fenwick_pct,
@@ -462,6 +474,77 @@ class TeamStrengthAgent:
                 result[team][key] = float(z)
         return result
 
+    # Rolling window metrics for recent form / momentum
+    ROLLING_KEYS = [
+        "xg_share", "fenwick_share", "hd_xg_share",
+        "shooting_pct", "save_pct", "score_adj_xg_share",
+    ]
+
+    @classmethod
+    def _compute_rolling_composites(
+        cls,
+        team_games: dict[str, list[dict]],
+        teams: list[str],
+        regression_k: int,
+    ) -> dict[str, dict[str, float]]:
+        """Compute 5-game and 10-game rolling composites + momentum.
+
+        Returns {team: {"composite_5g": ..., "composite_10g": ..., "momentum": ...}}
+        """
+        rolling_raw_5: dict[str, dict[str, float]] = {}
+        rolling_raw_10: dict[str, dict[str, float]] = {}
+        game_counts_5: dict[str, int] = {}
+        game_counts_10: dict[str, int] = {}
+
+        for team in teams:
+            games = team_games.get(team, [])
+            # Sort by date descending (most recent first)
+            sorted_games = sorted(games, key=lambda g: g.get("game_date", ""), reverse=True)
+
+            for window, raw_dict, counts_dict in [
+                (5, rolling_raw_5, game_counts_5),
+                (10, rolling_raw_10, game_counts_10),
+            ]:
+                window_games = sorted_games[:window]
+                counts_dict[team] = len(window_games)
+                if not window_games:
+                    raw_dict[team] = {k: 0.5 for k in cls.ROLLING_KEYS}
+                    continue
+                raw_dict[team] = {
+                    k: sum(g[k] for g in window_games) / len(window_games)
+                    for k in cls.ROLLING_KEYS
+                }
+
+        # Z-score rolling metrics across teams
+        z_5 = cls._z_score_all(rolling_raw_5, teams, cls.ROLLING_KEYS)
+        z_10 = cls._z_score_all(rolling_raw_10, teams, cls.ROLLING_KEYS)
+
+        result: dict[str, dict[str, float]] = {}
+        for team in teams:
+            n5 = game_counts_5.get(team, 0)
+            n10 = game_counts_10.get(team, 0)
+
+            # Bayesian shrinkage (less regression for rolling — smaller k)
+            reg_5 = {
+                k: regress_to_mean(z_5[team][k], n5, max(1, regression_k // 6), prior=0.0)
+                for k in cls.ROLLING_KEYS
+            }
+            reg_10 = {
+                k: regress_to_mean(z_10[team][k], n10, max(1, regression_k // 4), prior=0.0)
+                for k in cls.ROLLING_KEYS
+            }
+
+            comp_5 = composite_strength(reg_5)
+            comp_10 = composite_strength(reg_10)
+
+            result[team] = {
+                "composite_5g": comp_5,
+                "composite_10g": comp_10,
+                "momentum": comp_5 - comp_10,
+            }
+
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Agent 4: Edge scoring with logistic win probability (Phase 2)
@@ -514,9 +597,14 @@ class EdgeScoringAgent:
         else:
             home_prob = logistic_home
 
-        # Apply situational + goalie adjustments
+        # Momentum adjustment from rolling windows
+        momentum_adj = 0.0
+        if home_metrics.composite_5g != 0.0 or away_metrics.composite_5g != 0.0:
+            momentum_adj = (home_metrics.momentum - away_metrics.momentum) * 0.02
+
+        # Apply situational + goalie + momentum adjustments
         # goalie_adj is in percentage points (e.g. 3.0 = 3pp), convert to probability
-        total_adj = sit_adj + goalie_adj / 100.0
+        total_adj = sit_adj + goalie_adj / 100.0 + momentum_adj
         home_prob = max(0.01, min(0.99, home_prob + total_adj))
         away_prob = 1.0 - home_prob
 

@@ -33,6 +33,10 @@ class TeamMetrics:
     away_strength: float = 0.0
     games_played: int = 0
     composite: float = 0.0
+    # Rolling window composites
+    composite_5g: float = 0.0     # 5-game rolling composite strength
+    composite_10g: float = 0.0    # 10-game rolling composite strength
+    momentum: float = 0.0         # composite_5g - composite_10g (trend signal)
     # Goalie enrichment
     starter_save_pct: float = 0.0
     starter_gaa: float = 0.0

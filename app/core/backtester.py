@@ -163,6 +163,11 @@ def backtest_season(
             else:
                 home_prob = logistic_home
 
+            # Momentum adjustment from rolling windows
+            if home_metrics.composite_5g != 0.0 or away_metrics.composite_5g != 0.0:
+                momentum_adj = (home_metrics.momentum - away_metrics.momentum) * 0.02
+                home_prob += momentum_adj
+
             # Clamp to avoid log(0)
             home_prob = max(0.01, min(0.99, home_prob))
 
