@@ -67,15 +67,26 @@ def backtest_season(
     home_advantage = getattr(config, "home_advantage", 0.15)
     logistic_k = getattr(config, "logistic_k", 1.0)
 
+    # Detect team-game-by-game format (has 'playerTeam') vs legacy (has 'homeTeamCode')
+    is_team_gbg = bool(games_rows and "playerTeam" in games_rows[0])
+
     # Parse dates and sort games
     date_fmt = "%Y-%m-%d"
     games_with_dates: list[tuple[datetime, dict[str, str]]] = []
     for row in games_rows:
         raw_date = row.get("gameDate", "")[:10]
         try:
-            dt = datetime.strptime(raw_date, date_fmt)
+            # Support both YYYY-MM-DD and YYYYMMDD formats
+            if len(raw_date) == 8 and "-" not in raw_date:
+                dt = datetime.strptime(raw_date, "%Y%m%d")
+            else:
+                dt = datetime.strptime(raw_date, date_fmt)
         except ValueError:
             continue
+        # For team-gbg format, only keep home-team "all" situation rows to avoid double-counting
+        if is_team_gbg:
+            if row.get("home_or_away", "") != "HOME" or row.get("situation", "") != "all":
+                continue
         games_with_dates.append((dt, row))
 
     games_with_dates.sort(key=lambda x: x[0])
@@ -113,8 +124,12 @@ def backtest_season(
 
         # Predict each game on this date
         for game_row in date_groups[test_date_str]:
-            home_team = game_row["homeTeamCode"]
-            away_team = game_row["awayTeamCode"]
+            if is_team_gbg:
+                home_team = game_row.get("playerTeam", "")
+                away_team = game_row.get("opposingTeam", "")
+            else:
+                home_team = game_row["homeTeamCode"]
+                away_team = game_row["awayTeamCode"]
 
             home_metrics = strength.get(home_team)
             away_metrics = strength.get(away_team)

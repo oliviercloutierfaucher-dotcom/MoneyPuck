@@ -223,20 +223,20 @@ def days_between(date_a: str, date_b: str) -> int:
 def logistic_win_probability(
     home_strength: float,
     away_strength: float,
-    home_advantage: float = 0.15,
-    k: float = 1.0,
+    home_advantage: float = 0.14,
+    k: float = 0.9,
 ) -> tuple[float, float]:
     """Logistic model mapping composite-strength difference to win probability.
 
     *home_advantage* is added to the home side in z-score space.
-    *k* is a scaling constant (1.0 means 1-std difference ~ 73% win prob).
+    *k* is a scaling constant (0.9 means 1-std difference ~ 71% win prob).
     Returns (home_prob, away_prob), each clamped to [0.01, 0.99].
 
-    Parameter audit (home_advantage = 0.15)
+    Parameter audit (home_advantage = 0.14)
     -----------------------------------------
     For equal teams (both composite strength 0.0):
-        diff = 0.0 + 0.15 - 0.0 = 0.15
-        prob = 1 / (1 + e^(-1.0 * 0.15)) = 0.5374  (~53.7%)
+        diff = 0.0 + 0.14 - 0.0 = 0.14
+        prob = 1 / (1 + e^(-0.9 * 0.14)) = 0.5314  (~53.1%)
 
     NHL home-ice advantage (2018-2024 regular season) has ranged from
     roughly 53% to 56%, with recent seasons clustering around 54-55%.

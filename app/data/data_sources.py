@@ -148,7 +148,9 @@ def _fetch_with_retry(url: str, timeout: int = 30, label: str = "API") -> bytes:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             log.debug("Fetching %s (attempt %d/%d)", label, attempt, MAX_RETRIES)
-            with urlopen(url, timeout=timeout) as response:  # nosec B310
+            from urllib.request import Request
+            req = Request(url, headers={"User-Agent": "MoneyPuck/1.0"})
+            with urlopen(req, timeout=timeout) as response:  # nosec B310
                 data = response.read()
                 log.debug("%s fetch succeeded (%d bytes)", label, len(data))
                 return data
@@ -213,6 +215,171 @@ def fetch_odds(api_key: str, region: str, bookmakers: str | None) -> list[dict[s
 
     log.info("Received %d events from Odds API", len(events))
     return events
+
+
+# ---------------------------------------------------------------------------
+# Polymarket integration
+# ---------------------------------------------------------------------------
+
+POLYMARKET_GAMMA_BASE = "https://gamma-api.polymarket.com"
+POLYMARKET_NHL_SERIES_ID = "10346"
+
+# Polymarket uses short team names — map to 3-letter NHL codes
+_POLYMARKET_NAME_TO_CODE: dict[str, str] = {
+    "Ducks": "ANA",
+    "Bruins": "BOS",
+    "Sabres": "BUF",
+    "Flames": "CGY",
+    "Hurricanes": "CAR",
+    "Blackhawks": "CHI",
+    "Avalanche": "COL",
+    "Blue Jackets": "CBJ",
+    "Stars": "DAL",
+    "Red Wings": "DET",
+    "Oilers": "EDM",
+    "Panthers": "FLA",
+    "Kings": "LAK",
+    "Wild": "MIN",
+    "Canadiens": "MTL",
+    "Predators": "NSH",
+    "Devils": "NJD",
+    "Islanders": "NYI",
+    "Rangers": "NYR",
+    "Senators": "OTT",
+    "Flyers": "PHI",
+    "Penguins": "PIT",
+    "Sharks": "SJS",
+    "Kraken": "SEA",
+    "Blues": "STL",
+    "Lightning": "TBL",
+    "Maple Leafs": "TOR",
+    "Utah": "UTA",
+    "Canucks": "VAN",
+    "Golden Knights": "VGK",
+    "Capitals": "WSH",
+    "Jets": "WPG",
+}
+
+
+def _probability_to_american(prob: float) -> int:
+    """Convert 0-1 probability to American odds."""
+    if prob <= 0.0 or prob >= 1.0:
+        return 0
+    if prob >= 0.5:
+        return int(round(-(prob / (1.0 - prob)) * 100))
+    return int(round(((1.0 - prob) / prob) * 100))
+
+
+def fetch_polymarket_odds() -> list[dict[str, Any]]:
+    """Fetch NHL moneyline odds from Polymarket's Gamma API.
+
+    Returns data in the same format as fetch_odds() (Odds API format)
+    so it plugs directly into the EdgeScoringAgent pipeline.
+
+    No auth required — Polymarket's read API is fully public.
+    """
+    url = (
+        f"{POLYMARKET_GAMMA_BASE}/events"
+        f"?series_id={POLYMARKET_NHL_SERIES_ID}"
+        f"&active=true&closed=false&limit=50"
+    )
+    try:
+        data = _fetch_with_retry(url, label="Polymarket", timeout=15)
+        events_raw = json.loads(data.decode("utf-8"))
+    except Exception as exc:
+        log.warning("Polymarket fetch failed: %s", exc)
+        return []
+
+    if not isinstance(events_raw, list):
+        log.warning("Polymarket returned unexpected type: %s", type(events_raw).__name__)
+        return []
+
+    odds_events: list[dict[str, Any]] = []
+
+    for event in events_raw:
+        title = event.get("title", "")
+        # Title format: "Away vs. Home" — parse team names
+        if " vs. " not in title:
+            continue
+
+        markets = event.get("markets", [])
+
+        # Find the moneyline market
+        moneyline = None
+        for m in markets:
+            if m.get("sportsMarketType") == "moneyline":
+                moneyline = m
+                break
+
+        if moneyline is None:
+            continue
+
+        try:
+            outcomes = json.loads(moneyline.get("outcomes", "[]"))
+            prices = json.loads(moneyline.get("outcomePrices", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        if len(outcomes) != 2 or len(prices) != 2:
+            continue
+
+        # Map short names to NHL codes
+        code_0 = _POLYMARKET_NAME_TO_CODE.get(outcomes[0])
+        code_1 = _POLYMARKET_NAME_TO_CODE.get(outcomes[1])
+        if not code_0 or not code_1:
+            log.debug("Polymarket: unmapped team in %s", title)
+            continue
+
+        # Determine home/away from title ("Away vs. Home")
+        parts = title.split(" vs. ")
+        away_name = parts[0].strip()
+        home_name = parts[1].strip()
+        home_code = _POLYMARKET_NAME_TO_CODE.get(home_name)
+        away_code = _POLYMARKET_NAME_TO_CODE.get(away_name)
+        if not home_code or not away_code:
+            continue
+
+        # Build outcome prices as American odds
+        prob_0 = float(prices[0])
+        prob_1 = float(prices[1])
+
+        american_0 = _probability_to_american(prob_0)
+        american_1 = _probability_to_american(prob_1)
+        if american_0 == 0 or american_1 == 0:
+            continue
+
+        # Use gameStartTime or endDate as commence_time
+        commence = moneyline.get("gameStartTime", "")
+        if not commence:
+            commence = moneyline.get("endDate", "")
+
+        # Convert Polymarket event to Odds API format
+        odds_event: dict[str, Any] = {
+            "id": f"polymarket_{event.get('id', '')}",
+            "sport_key": "icehockey_nhl",
+            "commence_time": commence,
+            "home_team": home_code,
+            "away_team": away_code,
+            "bookmakers": [
+                {
+                    "key": "polymarket",
+                    "title": "Polymarket",
+                    "markets": [
+                        {
+                            "key": "h2h",
+                            "outcomes": [
+                                {"name": home_code, "price": american_0 if code_0 == home_code else american_1},
+                                {"name": away_code, "price": american_0 if code_0 == away_code else american_1},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+        odds_events.append(odds_event)
+
+    log.info("Fetched %d NHL events from Polymarket", len(odds_events))
+    return odds_events
 
 
 REQUIRED_COLUMNS = {
@@ -295,9 +462,9 @@ def fetch_team_game_by_game(
     Falls back to the bulk games.csv if per-team fetches fail.
     """
     target_teams = teams or NHL_TEAMS
-    # MoneyPuck uses the season start year (e.g., 2024 for 2024-25 season,
-    # but the team game-by-game endpoint uses the next year: 2025 for 2024-25)
-    mp_year = season + 1
+    # MoneyPuck directory year matches the season start year
+    # (e.g., 2025 directory = 2025-26 season starting Oct 2025)
+    mp_year = season
 
     all_rows: list[dict[str, str]] = []
     failed_teams: list[str] = []

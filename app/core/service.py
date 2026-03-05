@@ -9,6 +9,7 @@ from datetime import datetime
 from app.core.agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgent, RiskAgent, TeamStrengthAgent
 from app.logging_config import get_logger
 from app.core.models import MarketSnapshot, TeamMetrics, TrackerConfig
+from app.data.data_sources import fetch_polymarket_odds
 from app.data.nhl_api import fetch_goalie_stats
 
 log = get_logger("service")
@@ -41,10 +42,11 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     data_agent = MoneyPuckDataAgent()
     strength_agent = TeamStrengthAgent()
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         odds_future = pool.submit(market_agent.run, config)
         moneypuck_future = pool.submit(data_agent.run, config)
         goalie_future = pool.submit(_fetch_goalies_safe)
+        polymarket_future = pool.submit(fetch_polymarket_odds)
 
         try:
             odds_events = odds_future.result(timeout=45)
@@ -72,6 +74,33 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
         except Exception as exc:  # noqa: BLE001
             log.error("Goalie stats fetch failed: %s", exc)
             goalie_stats = []
+
+    # Merge Polymarket odds (best-effort — never blocks on failure)
+    try:
+        poly_events = polymarket_future.result(timeout=15)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Polymarket fetch failed: %s", exc)
+        poly_events = []
+
+    if poly_events:
+        # Merge Polymarket as an additional bookmaker on matching events,
+        # or add as new events if no Odds API match exists.
+        existing_keys = {
+            (e.get("home_team"), e.get("away_team")): e
+            for e in odds_events
+        }
+        for pe in poly_events:
+            key = (pe.get("home_team"), pe.get("away_team"))
+            if key in existing_keys:
+                # Add Polymarket as another bookmaker on the existing event
+                existing_keys[key]["bookmakers"].extend(pe["bookmakers"])
+            else:
+                # New event only on Polymarket
+                odds_events.append(pe)
+        log.info(
+            "Merged %d Polymarket events (%d total odds events)",
+            len(poly_events), len(odds_events),
+        )
 
     if not odds_events:
         log.warning("No odds events received — recommendations will be empty")

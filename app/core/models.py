@@ -73,8 +73,8 @@ class TrackerConfig:
     # Tunable model parameters
     half_life: float = 30.0
     regression_k: int = 20
-    home_advantage: float = 0.15
-    logistic_k: float = 1.0
+    home_advantage: float = 0.14
+    logistic_k: float = 0.9
     goalie_impact: float = 1.5
 
 

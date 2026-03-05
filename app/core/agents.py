@@ -476,8 +476,8 @@ class EdgeScoringAgent:
         strength: dict[str, TeamMetrics],
         sit_adj: float = 0.0,
         goalie_adj: float = 0.0,
-        home_advantage: float = 0.15,
-        logistic_k: float = 1.0,
+        home_advantage: float = 0.14,
+        logistic_k: float = 0.9,
     ) -> tuple[float, float, float]:
         """Returns (home_prob, away_prob, confidence).
 

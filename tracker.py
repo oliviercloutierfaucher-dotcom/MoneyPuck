@@ -49,11 +49,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validate", action="store_true", help="Print model health report from stored predictions")
     parser.add_argument("--settle", action="store_true", help="Auto-settle outstanding predictions against NHL results")
     parser.add_argument("--tonight", action="store_true", help="Show tonight's games with model probabilities and value bets")
+    parser.add_argument("--polymarket", action="store_true", help="Show Polymarket NHL odds and edge opportunities")
     # Tunable model parameters
     parser.add_argument("--half-life", type=float, default=30.0, help="Decay half-life in days for game weighting")
     parser.add_argument("--regression-k", type=int, default=20, help="Bayesian regression-to-mean sample size")
-    parser.add_argument("--home-advantage", type=float, default=0.15, help="Home ice advantage in z-score space")
-    parser.add_argument("--logistic-k", type=float, default=1.0, help="Logistic scaling constant")
+    parser.add_argument("--home-advantage", type=float, default=0.14, help="Home ice advantage in z-score space")
+    parser.add_argument("--logistic-k", type=float, default=0.9, help="Logistic scaling constant")
     parser.add_argument("--goalie-impact", type=float, default=1.5, help="Goalie save%% impact scaling factor")
     parser.add_argument("--backtest", action="store_true", help="Run backtesting against historical data")
     parser.add_argument("--log-level", default=None, help="Logging level (DEBUG, INFO, WARNING, ERROR)")
@@ -246,9 +247,9 @@ def main() -> int:
                 format_report,
                 production_readiness_report,
             )
-            from app.data.data_sources import fetch_moneypuck_games
+            from app.data.data_sources import fetch_team_game_by_game
             log.info("Starting backtest for season %d", config.season)
-            games = fetch_moneypuck_games(config.season)
+            games = fetch_team_game_by_game(config.season)
             log.info("Backtesting %d games", len(games))
             preds = backtest_season(games, config)
             report = production_readiness_report(preds, config)
@@ -261,6 +262,50 @@ def main() -> int:
         if args.army:
             army_results = run_agent_army(config)
             print(json.dumps(army_results, indent=2))
+            return 0
+
+        if args.polymarket:
+            from app.data.data_sources import fetch_polymarket_odds, fetch_team_game_by_game
+            from app.core.agents import EdgeScoringAgent, TeamStrengthAgent
+            from app.math.math_utils import american_to_implied_probability
+
+            poly_events = fetch_polymarket_odds()
+            if not poly_events:
+                print("No Polymarket NHL events found.")
+                return 0
+
+            # Build team strength from MoneyPuck data
+            games = fetch_team_game_by_game(config.season)
+            agent = TeamStrengthAgent()
+            strength = agent.run(games, config)
+
+            # Score edges
+            edge_agent = EdgeScoringAgent()
+            candidates = edge_agent.run(poly_events, strength, config, games)
+
+            print("=" * 72)
+            print("  POLYMARKET NHL EDGE SCANNER")
+            print("=" * 72)
+            print(f"\n  {len(poly_events)} games on Polymarket, {len(candidates)} value bets found\n")
+
+            if not candidates:
+                print("  No edges found above minimum thresholds.")
+                print(f"  (min_edge={config.min_edge}pp, min_ev=${config.min_ev}/dollar)")
+            else:
+                # Sort by edge descending
+                candidates.sort(key=lambda c: c.edge_probability_points, reverse=True)
+                print(f"  {'Game':<25} {'Side':<6} {'Poly Odds':>10} {'Model':>7} {'Implied':>8} {'Edge':>7} {'EV':>7}")
+                print(f"  {'-'*25} {'-'*6} {'-'*10} {'-'*7} {'-'*8} {'-'*7} {'-'*7}")
+                for c in candidates:
+                    game = f"{c.away_team} @ {c.home_team}"
+                    odds_str = f"{c.american_odds:+d}"
+                    print(
+                        f"  {game:<25} {c.side:<6} {odds_str:>10} "
+                        f"{c.model_probability:>6.1%} {c.implied_probability:>7.1%} "
+                        f"{c.edge_probability_points:>+6.1f}pp "
+                        f"{c.expected_value_per_dollar:>+6.2f}"
+                    )
+            print("\n" + "=" * 72)
             return 0
 
         if args.tonight:
