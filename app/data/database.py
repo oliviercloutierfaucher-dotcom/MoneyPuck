@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS model_runs (
     avg_ev            REAL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_predictions_unique
+    ON predictions (commence_time, home_team, away_team, side, sportsbook, profile);
+
 CREATE INDEX IF NOT EXISTS idx_predictions_game
     ON predictions (commence_time, home_team, away_team);
 
@@ -122,7 +125,7 @@ class TrackerDatabase:
 
         cur = self._conn.execute(
             """
-            INSERT INTO predictions (
+            INSERT OR IGNORE INTO predictions (
                 game_id, commence_time, home_team, away_team,
                 side, sportsbook,
                 american_odds, decimal_odds,
@@ -202,10 +205,15 @@ class TrackerDatabase:
         outcome: str,
         closing_odds: int | None,
         profit_loss: float,
+        auto_commit: bool = True,
     ) -> None:
-        """Mark a prediction as settled with its outcome and P&L."""
-        if outcome not in {"win", "loss", "push"}:
-            raise ValueError(f"Invalid outcome '{outcome}'. Must be 'win', 'loss', or 'push'.")
+        """Mark a prediction as settled with its outcome and P&L.
+
+        Set *auto_commit* to ``False`` when calling inside an explicit
+        transaction (the caller is responsible for commit/rollback).
+        """
+        if outcome not in {"win", "loss", "push", "void"}:
+            raise ValueError(f"Invalid outcome '{outcome}'. Must be 'win', 'loss', 'push', or 'void'.")
         self._conn.execute(
             """
             UPDATE predictions
@@ -222,7 +230,8 @@ class TrackerDatabase:
                 "profit_loss": profit_loss,
             },
         )
-        self._conn.commit()
+        if auto_commit:
+            self._conn.commit()
 
     def get_predictions(
         self,

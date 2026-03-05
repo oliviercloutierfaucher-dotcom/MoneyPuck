@@ -25,20 +25,28 @@ NHL_API_BASE = "https://api-web.nhle.com/v1"
 # Internal helper
 # ---------------------------------------------------------------------------
 
-def _fetch_json(url: str, timeout: int = 15) -> dict:
+def _fetch_json(url: str, timeout: int = 15, retries: int = 2) -> dict:
     """Fetch *url* and return parsed JSON as a dict.
 
+    Retries up to *retries* times with 3-second backoff on failure.
     Returns an empty dict on **any** error so callers never need to handle
     exceptions -- this is a best-effort enrichment layer.
     """
-    try:
-        req = Request(url, headers={"User-Agent": "MoneyPuck/1.0"})
-        with urlopen(req, timeout=timeout) as resp:  # nosec B310
-            raw = resp.read().decode("utf-8")
-        return json.loads(raw)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("NHL API request failed for %s: %s", url, exc)
-        return {}
+    import time
+
+    for attempt in range(1, retries + 2):  # 1-indexed, total = retries + 1
+        try:
+            req = Request(url, headers={"User-Agent": "MoneyPuck/1.0"})
+            with urlopen(req, timeout=timeout) as resp:  # nosec B310
+                raw = resp.read().decode("utf-8")
+            return json.loads(raw)
+        except Exception as exc:  # noqa: BLE001
+            if attempt <= retries:
+                log.debug("NHL API attempt %d/%d failed for %s: %s", attempt, retries + 1, url, exc)
+                time.sleep(3)
+            else:
+                log.warning("NHL API request failed after %d attempts for %s: %s", attempt, url, exc)
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +249,52 @@ def infer_likely_starter(
 # ---------------------------------------------------------------------------
 # Standings
 # ---------------------------------------------------------------------------
+
+def fetch_game_score(game_id: int) -> dict[str, Any] | None:
+    """Fetch final score for a specific game by NHL game ID.
+
+    Returns a dict with keys: game_id, home_team, away_team, home_score,
+    away_score, game_state.  Returns None if the game is not found or
+    the API call fails.
+
+    game_state values: "OFF" or "FINAL" = game is over.
+    """
+    url = f"{NHL_API_BASE}/gamecenter/{game_id}/landing"
+    data = _fetch_json(url)
+    if not data:
+        return None
+
+    home = data.get("homeTeam", {})
+    away = data.get("awayTeam", {})
+    return {
+        "game_id": data.get("id", game_id),
+        "home_team": home.get("abbrev", ""),
+        "away_team": away.get("abbrev", ""),
+        "home_score": int(home.get("score", 0)),
+        "away_score": int(away.get("score", 0)),
+        "game_state": data.get("gameState", ""),
+    }
+
+
+def fetch_scores_for_date(date_str: str | None = None) -> list[dict[str, Any]]:
+    """Fetch final scores for all games on a given date.
+
+    Combines fetch_schedule + fetch_game_score for finished games.
+    Only returns games where game_state indicates completion (OFF/FINAL).
+    """
+    schedule = fetch_schedule(date_str)
+    results: list[dict[str, Any]] = []
+
+    for game in schedule:
+        state = game.get("game_state", "")
+        if state not in ("OFF", "FINAL"):
+            continue
+        score = fetch_game_score(game["game_id"])
+        if score:
+            results.append(score)
+
+    return results
+
 
 def fetch_standings() -> list[dict[str, Any]]:
     """Fetch current NHL standings.

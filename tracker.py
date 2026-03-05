@@ -47,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     parser.add_argument("--persist", action="store_true", help="Save predictions to SQLite database")
     parser.add_argument("--validate", action="store_true", help="Print model health report from stored predictions")
+    parser.add_argument("--settle", action="store_true", help="Auto-settle outstanding predictions against NHL results")
     parser.add_argument("--tonight", action="store_true", help="Show tonight's games with model probabilities and value bets")
     # Tunable model parameters
     parser.add_argument("--half-life", type=float, default=30.0, help="Decay half-life in days for game weighting")
@@ -143,7 +144,7 @@ def _print_tonight(recommendations: list[dict[str, object]], snapshot, config: T
                         home_m.starter_save_pct, away_m.starter_save_pct,
                         config.goalie_impact,
                     )
-                    hp = max(0.01, min(0.99, hp + g_adj))
+                    hp = max(0.01, min(0.99, hp + g_adj / 100.0))
                     ap = 1.0 - hp
                 diff = abs(hp - ap) * 100
                 fav = home if hp > ap else away
@@ -222,6 +223,21 @@ def main() -> int:
                 settled = [s for s in settled if s.get("outcome") is not None]
             report = model_health_report(settled)
             print(json.dumps(report, indent=2))
+            return 0
+
+        if args.settle:
+            from app.core.service import settle_outstanding
+            result = settle_outstanding()
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"\nSettlement complete:")
+                print(f"  Settled: {result['settled']} prediction(s)")
+                print(f"  P&L:    ${result['total_pnl']:+.2f}")
+                if result["errors"]:
+                    print(f"  Errors:  {len(result['errors'])}")
+                    for e in result["errors"]:
+                        print(f"    - {e}")
             return 0
 
         if args.backtest:
@@ -308,7 +324,7 @@ def main() -> int:
                                 hm.starter_save_pct, am.starter_save_pct,
                                 config.goalie_impact,
                             )
-                            hp = max(0.01, min(0.99, hp + g_adj))
+                            hp = max(0.01, min(0.99, hp + g_adj / 100.0))
                             ap = 1.0 - hp
                         output["games"].append({
                             "home": home,

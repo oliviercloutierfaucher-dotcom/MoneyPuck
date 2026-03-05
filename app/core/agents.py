@@ -333,8 +333,8 @@ class TeamStrengthAgent:
             ta_ga_total = takeaways_for + giveaways_for
             ta_ratio = takeaways_for / ta_ga_total if ta_ga_total else 0.5
 
-            sh_pct = goals_for / shots_for if shots_for else 0.08
-            sv_pct = 1 - (goals_against / shots_against) if shots_against else 0.91
+            sh_pct = max(0.0, min(1.0, goals_for / shots_for)) if shots_for else 0.08
+            sv_pct = max(0.0, min(1.0, 1 - (goals_against / shots_against))) if shots_against else 0.91
 
             entry = {
                 "weight": weight,
@@ -390,8 +390,8 @@ class TeamStrengthAgent:
 
             hd_total = hd_for + hd_against
             hd_share = hd_for / hd_total if hd_total else 0.5
-            sh_pct = goals_for / shots_for if shots_for else 0.08
-            sv_pct = 1 - (goals_against / shots_against) if shots_against else 0.91
+            sh_pct = max(0.0, min(1.0, goals_for / shots_for)) if shots_for else 0.08
+            sv_pct = max(0.0, min(1.0, 1 - (goals_against / shots_against))) if shots_against else 0.91
 
             entry = {
                 "weight": weight,
@@ -415,6 +415,8 @@ class TeamStrengthAgent:
 
             team_games[home].append({**entry, "venue": "home"})
             # Away team: flip share metrics
+            away_sh = max(0.0, min(1.0, goals_against / shots_against)) if shots_against else 0.08
+            away_sv = max(0.0, min(1.0, 1 - (goals_for / shots_for))) if shots_for else 0.91
             away_entry = {
                 "weight": weight,
                 "xg_share": 1 - xg_pct,
@@ -429,8 +431,8 @@ class TeamStrengthAgent:
                 "faceoff_pct": 0.5,
                 "takeaway_ratio": 0.5,
                 "dzone_giveaway_rate": 0.0,
-                "shooting_pct": goals_against / shots_against if shots_against else 0.08,
-                "save_pct": 1 - (goals_for / shots_for) if shots_for else 0.91,
+                "shooting_pct": away_sh,
+                "save_pct": away_sv,
                 "pp_xg_per_60": xg_against,
                 "pk_xg_against_per_60": xg_for,
                 "venue": "away",
@@ -497,7 +499,8 @@ class EdgeScoringAgent:
             home_z, away_z, home_advantage=home_advantage, k=logistic_k
         )
         # Apply situational + goalie adjustments
-        total_adj = sit_adj + goalie_adj
+        # goalie_adj is in percentage points (e.g. 3.0 = 3pp), convert to probability
+        total_adj = sit_adj + goalie_adj / 100.0
         home_prob = max(0.01, min(0.99, home_prob + total_adj))
         away_prob = 1.0 - home_prob
 

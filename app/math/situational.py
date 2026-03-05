@@ -36,12 +36,14 @@ TEAM_TIMEZONE: dict[str, int] = {
     "FLA": 0,   # Florida Panthers
     "MTL": 0,   # Montreal Canadiens
     "OTT": 0,   # Ottawa Senators
-    "T.B": 0,   # Tampa Bay Lightning
+    "T.B": 0,   # Tampa Bay Lightning (MoneyPuck format)
+    "TBL": 0,   # Tampa Bay Lightning (NHL API format)
     "TOR": 0,   # Toronto Maple Leafs
     # Metropolitan Division
     "CAR": 0,   # Carolina Hurricanes
     "CBJ": 0,   # Columbus Blue Jackets
-    "N.J": 0,   # New Jersey Devils
+    "N.J": 0,   # New Jersey Devils (MoneyPuck format)
+    "NJD": 0,   # New Jersey Devils (NHL API format)
     "NYI": 0,   # New York Islanders
     "NYR": 0,   # New York Rangers
     "PHI": 0,   # Philadelphia Flyers
@@ -60,8 +62,10 @@ TEAM_TIMEZONE: dict[str, int] = {
     "ANA": -3,  # Anaheim Ducks
     "CGY": -2,  # Calgary Flames
     "EDM": -2,  # Edmonton Oilers
-    "L.A": -3,  # Los Angeles Kings
-    "S.J": -3,  # San Jose Sharks
+    "L.A": -3,  # Los Angeles Kings (MoneyPuck format)
+    "LAK": -3,  # Los Angeles Kings (NHL API format)
+    "S.J": -3,  # San Jose Sharks (MoneyPuck format)
+    "SJS": -3,  # San Jose Sharks (NHL API format)
     "SEA": -3,  # Seattle Kraken
     "VAN": -3,  # Vancouver Canucks
     "VGK": -3,  # Vegas Golden Knights
