@@ -11,23 +11,13 @@ from datetime import date, datetime
 
 from app.core.army import run_agent_army
 from app.logging_config import get_logger, setup_logging
-from app.core.models import TrackerConfig
+from app.core.models import TrackerConfig, _current_nhl_season
 from app.web.presentation import to_serializable
 from app.core.service import run_tracker
 
 log = get_logger("cli")
 
 SUPPORTED_REGIONS = {"ca", "us"}
-
-
-def _current_nhl_season() -> int:
-    """Return the current NHL season start year (e.g. 2025 for the 2025-26 season).
-
-    The NHL season runs roughly October to June, so before October we're
-    still in the previous season.
-    """
-    now = datetime.now()
-    return now.year if now.month >= 10 else now.year - 1
 
 
 def parse_args() -> argparse.Namespace:

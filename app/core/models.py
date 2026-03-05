@@ -5,6 +5,11 @@ from datetime import datetime
 from typing import Any
 
 
+def _current_nhl_season() -> int:
+    now = datetime.now()
+    return now.year if now.month >= 10 else now.year - 1
+
+
 @dataclass(frozen=True)
 class TeamMetrics:
     """Multi-factor team strength profile."""
@@ -65,7 +70,7 @@ class TrackerConfig:
     odds_api_key: str
     region: str = "ca"
     bookmakers: str = ""
-    season: int = 2024
+    season: int = field(default_factory=_current_nhl_season)
     min_edge: float = 2.0
     min_ev: float = 0.02
     bankroll: float = 1000.0

@@ -594,7 +594,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     </div>
     <div class="control-group">
       <label>Season</label>
-      <input id="ctl-season" type="number" value="2024">
+      <input id="ctl-season" type="number" value="">
     </div>
     <button class="btn btn-ghost" onclick="refreshDashboard(true)">Demo Data</button>
   </div>
@@ -720,7 +720,14 @@ function restorePrefs() {{
   }} catch(e) {{}}
 }}
 
+function currentNhlSeason() {{
+  const now = new Date();
+  return now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+}}
+
 function init() {{
+  const seasonEl = document.getElementById('ctl-season');
+  if (!seasonEl.value) seasonEl.value = currentNhlSeason();
   restorePrefs();
   renderBooks(D.books || []);
   render(D);
