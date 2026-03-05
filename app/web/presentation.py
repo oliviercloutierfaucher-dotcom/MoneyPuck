@@ -306,9 +306,16 @@ def render_dashboard(data: dict[str, Any]) -> str:
       padding: 1px 8px; font-size: 10px; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.04em;
     }}
-    /* Probability buttons (Polymarket-inspired) */
+    /* Probability buttons (Model vs Street) */
+    .prob-section-label {{
+      padding: 0 16px; margin-bottom: 4px; font-size: 9px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--muted);
+    }}
+    .prob-section-label.model-label {{ color: var(--accent); }}
+    .prob-section-label.street-label {{ color: var(--amber); }}
     .prob-buttons {{
-      display: flex; gap: 8px; padding: 0 16px 12px;
+      display: flex; gap: 8px; padding: 0 16px 6px;
     }}
     .prob-btn {{
       flex: 1; display: flex; flex-direction: column;
@@ -321,6 +328,21 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .prob-btn .prob-team {{ font-size: 11px; font-weight: 600; color: var(--text-2); }}
     .prob-btn .prob-pct {{ font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -0.02em; margin-top: 1px; }}
     .prob-btn.fav .prob-pct {{ color: var(--accent); }}
+    /* Street (market consensus) row */
+    .street-row {{
+      display: flex; gap: 8px; padding: 0 16px 10px;
+    }}
+    .street-btn {{
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 6px; padding: 5px 8px; border-radius: 6px;
+      background: rgba(245,158,11,0.04); border: 1px solid rgba(245,158,11,0.12);
+      font-size: 11px; color: var(--text-2);
+    }}
+    .street-btn .street-pct {{ font-size: 15px; font-weight: 700; color: var(--amber); }}
+    .street-btn .street-team {{ font-size: 10px; font-weight: 600; }}
+    .edge-arrow {{ font-size: 10px; font-weight: 700; margin-left: 2px; }}
+    .edge-arrow.up {{ color: var(--green); }}
+    .edge-arrow.down {{ color: var(--red); }}
     /* Card footer info */
     .card-footer {{
       padding: 8px 16px 10px; font-size: 11px; color: var(--muted);
@@ -1060,8 +1082,8 @@ def render_dashboard(data: dict[str, Any]) -> str:
             <th onclick="sortBets('side')" data-sort-key="side">Pick</th>
             <th onclick="sortBets('sportsbook')" data-sort-key="sportsbook">Book</th>
             <th onclick="sortBets('decimal_odds')" data-sort-key="decimal_odds">Odds</th>
-            <th onclick="sortBets('implied_probability')" data-sort-key="implied_probability">Market %</th>
-            <th onclick="sortBets('model_probability')" data-sort-key="model_probability">Model %</th>
+            <th onclick="sortBets('implied_probability')" data-sort-key="implied_probability">Street %</th>
+            <th onclick="sortBets('model_probability')" data-sort-key="model_probability">Our Model %</th>
             <th onclick="sortBets('edge_probability_points')" data-sort-key="edge_probability_points">Edge</th>
             <th onclick="sortBets('expected_value_per_dollar')" data-sort-key="expected_value_per_dollar">EV/$</th>
             <th onclick="sortBets('confidence')" data-sort-key="confidence">Conf</th>
@@ -1199,6 +1221,51 @@ function init() {{
   }});
   if (D.mode !== 'live') {{
     refreshDashboard(false);
+  }}
+  // Auto-refresh live data every 60s (only in live mode, only when tab is visible)
+  startAutoRefresh();
+}}
+
+let autoRefreshInterval = null;
+let autoRefreshCountdown = 60;
+function startAutoRefresh() {{
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  autoRefreshCountdown = 60;
+  autoRefreshInterval = setInterval(() => {{
+    if (document.hidden) return; // skip when tab not visible
+    if (currentData.mode !== 'live') return; // only auto-refresh live mode
+    autoRefreshCountdown--;
+    const btn = document.getElementById('btn-refresh');
+    if (autoRefreshCountdown > 0) {{
+      btn.textContent = 'Refresh (' + autoRefreshCountdown + 's)';
+    }} else {{
+      autoRefreshCountdown = 60;
+      btn.textContent = 'Refresh';
+      silentRefresh();
+    }}
+  }}, 1000);
+}}
+
+async function silentRefresh() {{
+  // Lightweight refresh: just re-fetch JSON data, no loading overlay
+  try {{
+    const params = new URLSearchParams({{
+      region: document.getElementById('ctl-region').value,
+      bankroll: document.getElementById('ctl-bankroll').value,
+      min_edge: document.getElementById('ctl-min-edge').value,
+      min_ev: document.getElementById('ctl-min-ev').value,
+      season: document.getElementById('ctl-season').value,
+    }});
+    const res = await fetch('/api/dashboard?' + params.toString());
+    const data = await res.json();
+    if (!res.ok) return;
+    activeBooks = new Set(data.books || []);
+    renderBooks(data.books || []);
+    render(data);
+    savePrefs();
+    autoRefreshCountdown = 60;
+  }} catch(e) {{
+    // Silent failure — will retry next cycle
   }}
 }}
 
@@ -1372,8 +1439,8 @@ function renderPlays(bets) {{
           <div><div class="detail-label">Odds</div><div class="detail-value">${{odds}}</div></div>
           <div><div class="detail-label">Stake</div><div class="detail-value green">$${{n(b.recommended_stake)}}</div></div>
           <div><div class="detail-label">Edge</div><div class="detail-value green">+${{n(b.edge_probability_points)}}pp</div></div>
-          <div><div class="detail-label">Model</div><div class="detail-value">${{pct(b.model_probability)}}</div></div>
-          <div><div class="detail-label">EV/$1</div><div class="detail-value green">${{n(b.expected_value_per_dollar, 3)}}</div></div>
+          <div><div class="detail-label">Model</div><div class="detail-value" style="color:var(--accent)">${{pct(b.model_probability)}}</div></div>
+          <div><div class="detail-label">Street</div><div class="detail-value" style="color:var(--amber)">${{pct(b.implied_probability)}}</div></div>
         </div>
       </div>`;
   }}).join('');
@@ -1526,6 +1593,24 @@ function renderGameCard(g, bets, idx) {{
   const homeFav = g.home_prob >= g.away_prob;
   const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {{hour:'numeric', minute:'2-digit', timeZone:'America/New_York'}}) + ' ET' : '';
 
+  // Street consensus (average implied probability across books)
+  let streetRow = '';
+  if (g.books && g.books.length) {{
+    const avgHImp = g.books.reduce((a, b) => a + (b.home_implied || 0), 0) / g.books.length;
+    const avgAImp = g.books.reduce((a, b) => a + (b.away_implied || 0), 0) / g.books.length;
+    const hEdge = g.home_prob - avgHImp;
+    const aEdge = g.away_prob - avgAImp;
+    const hArrow = hEdge > 0.01 ? '<span class="edge-arrow up">+' + (hEdge*100).toFixed(1) + 'pp</span>'
+                 : hEdge < -0.01 ? '<span class="edge-arrow down">' + (hEdge*100).toFixed(1) + 'pp</span>' : '';
+    const aArrow = aEdge > 0.01 ? '<span class="edge-arrow up">+' + (aEdge*100).toFixed(1) + 'pp</span>'
+                 : aEdge < -0.01 ? '<span class="edge-arrow down">' + (aEdge*100).toFixed(1) + 'pp</span>' : '';
+    streetRow = `<div class="prob-section-label street-label">The Street</div>
+      <div class="street-row">
+        <div class="street-btn"><span class="street-team">${{esc(g.away)}}</span> <span class="street-pct">${{(avgAImp*100).toFixed(1)}}%</span>${{aArrow}}</div>
+        <div class="street-btn"><span class="street-team">${{esc(g.home)}}</span> <span class="street-pct">${{(avgHImp*100).toFixed(1)}}%</span>${{hArrow}}</div>
+      </div>`;
+  }}
+
   // Best odds + Polymarket footer
   let footer = '';
   if (g.books && g.books.length) {{
@@ -1566,6 +1651,7 @@ function renderGameCard(g, bets, idx) {{
           <span class="game-time">${{time}}</span>
         </div>
       </div>
+      <div class="prob-section-label model-label">Our Model</div>
       <div class="prob-buttons">
         <div class="prob-btn ${{!homeFav ? 'fav' : ''}}">
           <span class="prob-team">${{esc(g.away)}}</span>
@@ -1576,6 +1662,7 @@ function renderGameCard(g, bets, idx) {{
           <span class="prob-pct">${{hp}}%</span>
         </div>
       </div>
+      ${{streetRow}}
       ${{footer}}
     </div>`;
 }}
@@ -1791,7 +1878,8 @@ function openGameModal(idx) {{
         <span class="team-badge">${{esc(g.home)}}</span>
         <span style="margin-left:auto;color:var(--muted);font-size:12px">${{time}}</span>
       </div>
-      <div class="prob-buttons" style="padding:0;margin-top:8px">
+      <div class="prob-section-label model-label" style="padding:0;margin-top:10px">Our Model</div>
+      <div class="prob-buttons" style="padding:0;margin-top:4px">
         <div class="prob-btn ${{g.away_prob >= g.home_prob ? 'fav' : ''}}">
           <span class="prob-team">${{esc(g.away)}}</span>
           <span class="prob-pct">${{ap}}%</span>
@@ -1801,6 +1889,19 @@ function openGameModal(idx) {{
           <span class="prob-pct">${{hp}}%</span>
         </div>
       </div>
+      ${{(() => {{
+        if (!g.books || !g.books.length) return '';
+        const avgHI = g.books.reduce((a, b) => a + (b.home_implied || 0), 0) / g.books.length;
+        const avgAI = g.books.reduce((a, b) => a + (b.away_implied || 0), 0) / g.books.length;
+        const hE = g.home_prob - avgHI, aE = g.away_prob - avgAI;
+        const arrow = (e) => e > 0.01 ? '<span class="edge-arrow up">+' + (e*100).toFixed(1) + 'pp</span>'
+                           : e < -0.01 ? '<span class="edge-arrow down">' + (e*100).toFixed(1) + 'pp</span>' : '';
+        return `<div class="prob-section-label street-label" style="padding:0;margin-top:6px">The Street <span style="font-weight:400;letter-spacing:0">(avg of ${{g.books.length}} books)</span></div>
+          <div class="street-row" style="padding:0;margin-top:4px">
+            <div class="street-btn"><span class="street-team">${{esc(g.away)}}</span> <span class="street-pct">${{(avgAI*100).toFixed(1)}}%</span>${{arrow(aE)}}</div>
+            <div class="street-btn"><span class="street-team">${{esc(g.home)}}</span> <span class="street-pct">${{(avgHI*100).toFixed(1)}}%</span>${{arrow(hE)}}</div>
+          </div>`;
+      }})()}}
     </div>
     ${{lineMovementSection}}
     ${{polyHtml}}
@@ -1872,8 +1973,8 @@ function renderBets(bets) {{
       <td style="font-weight:700">${{esc(b.side)}} ${{esc(b.market || 'ML')}}</td>
       <td>${{bookLink(b.sportsbook, b.sportsbook_url)}}</td>
       <td class="odds-col">${{odds}}</td>
-      <td>${{pct(b.implied_probability)}}</td>
-      <td style="font-weight:600">${{pct(b.model_probability)}}</td>
+      <td style="color:var(--amber)">${{pct(b.implied_probability)}}</td>
+      <td style="font-weight:600;color:var(--accent)">${{pct(b.model_probability)}}</td>
       <td class="edge-col"><span class="edge-badge positive">+${{n(b.edge_probability_points)}}pp</span></td>
       <td class="ev-col">${{n(b.expected_value_per_dollar, 3)}}</td>
       <td><span style="color:${{confColor}};font-weight:600">${{confPct}}%</span></td>
@@ -1920,6 +2021,7 @@ async function refreshDashboard(demo) {{
     alert('Network error: ' + e.message);
   }} finally {{
     btn.textContent = 'Refresh'; btn.disabled = false;
+    autoRefreshCountdown = 60; // reset countdown after manual refresh
     overlay.classList.remove('active');
   }}
 }}
