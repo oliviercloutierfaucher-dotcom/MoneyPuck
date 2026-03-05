@@ -50,6 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--settle", action="store_true", help="Auto-settle outstanding predictions against NHL results")
     parser.add_argument("--tonight", action="store_true", help="Show tonight's games with model probabilities and value bets")
     parser.add_argument("--polymarket", action="store_true", help="Show Polymarket NHL odds and edge opportunities")
+    parser.add_argument("--arbs", action="store_true", help="Scan for arbitrage opportunities across all bookmakers + Polymarket")
     # Tunable model parameters
     parser.add_argument("--half-life", type=float, default=30.0, help="Decay half-life in days for game weighting")
     parser.add_argument("--regression-k", type=int, default=20, help="Bayesian regression-to-mean sample size")
@@ -306,6 +307,50 @@ def main() -> int:
                         f"{c.expected_value_per_dollar:>+6.2f}"
                     )
             print("\n" + "=" * 72)
+            return 0
+
+        if args.arbs:
+            from app.core.service import build_market_snapshot
+            from app.math.arbitrage import find_arbitrages, find_near_arbs
+
+            snapshot, _ = build_market_snapshot(config)
+            arbs = find_arbitrages(snapshot.odds_events)
+            near = find_near_arbs(snapshot.odds_events)
+
+            if args.json:
+                print(json.dumps({"arbs": arbs, "near_arbs": near}, indent=2))
+                return 0
+
+            print(f"\n{'=' * 80}")
+            print(f"  ARBITRAGE SCANNER — {len(snapshot.odds_events)} events, "
+                  f"{sum(len(e.get('bookmakers', [])) for e in snapshot.odds_events)} book-event combos")
+            print(f"{'=' * 80}")
+
+            if arbs:
+                print(f"\n  GUARANTEED ARBS ({len(arbs)})")
+                print(f"  {'Game':<28} {'Market':<14} {'Leg A':<22} {'Leg B':<22} {'Profit':>7} {'Split'}")
+                print(f"  {'-'*28} {'-'*14} {'-'*22} {'-'*22} {'-'*7} {'-'*11}")
+                for a in arbs:
+                    game = f"{a['away_team']} @ {a['home_team']}"
+                    leg_a = f"{a['side_a_book']} {a['side_a_odds']:.2f}"
+                    leg_b = f"{a['side_b_book']} {a['side_b_odds']:.2f}"
+                    split = f"{a['stake_a_pct']:.0f}/{a['stake_b_pct']:.0f}"
+                    print(f"  {game:<28} {a['market']:<14} {leg_a:<22} {leg_b:<22} "
+                          f"{a['profit_pct']:>+6.2f}% {split}")
+            else:
+                print("\n  No guaranteed arbs found.")
+
+            if near:
+                print(f"\n  NEAR-ARBS ({len(near)}) — watch for line movement")
+                print(f"  {'Game':<28} {'Leg A':<22} {'Leg B':<22} {'Vig':>6}")
+                print(f"  {'-'*28} {'-'*22} {'-'*22} {'-'*6}")
+                for n in near[:10]:
+                    game = f"{n['away_team']} @ {n['home_team']}"
+                    leg_a = f"{n['side_a_book']} {n['side_a_odds']:.2f}"
+                    leg_b = f"{n['side_b_book']} {n['side_b_odds']:.2f}"
+                    print(f"  {game:<28} {leg_a:<22} {leg_b:<22} {n['vig_pct']:>5.2f}%")
+
+            print(f"\n{'=' * 80}\n")
             return 0
 
         if args.tonight:

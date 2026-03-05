@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.agents import TeamStrengthAgent
+from app.math.elo import EloTracker, build_elo_ratings
 from app.math.math_utils import (
     DEFAULT_METRIC_WEIGHTS,
     kelly_fraction as kelly_fraction_fn,
@@ -17,6 +18,9 @@ from app.math.math_utils import (
     prediction_confidence,
 )
 from app.core.models import TrackerConfig
+
+# Elo ensemble weight in backtester (matches EdgeScoringAgent.ELO_WEIGHT)
+ELO_WEIGHT = 0.25
 
 
 # League average save percentage (used as baseline)
@@ -122,6 +126,12 @@ def backtest_season(
         agent.REGRESSION_K = regression_k
         strength = agent.run(train_rows)
 
+        # Build Elo ratings from training data
+        try:
+            elo_tracker = build_elo_ratings(train_rows)
+        except Exception:
+            elo_tracker = None
+
         # Predict each game on this date
         for game_row in date_groups[test_date_str]:
             if is_team_gbg:
@@ -140,11 +150,18 @@ def backtest_season(
             home_z = home_metrics.home_strength
             away_z = away_metrics.away_strength
 
-            home_prob, _ = logistic_win_probability(
+            logistic_home, _ = logistic_win_probability(
                 home_z, away_z,
                 home_advantage=home_advantage,
                 k=logistic_k,
             )
+
+            # Blend with Elo
+            if elo_tracker is not None:
+                elo_home = elo_tracker.predict(home_team, away_team)
+                home_prob = (1 - ELO_WEIGHT) * logistic_home + ELO_WEIGHT * elo_home
+            else:
+                home_prob = logistic_home
 
             # Clamp to avoid log(0)
             home_prob = max(0.01, min(0.99, home_prob))

@@ -57,6 +57,7 @@ from app.math.math_utils import (
 )
 from app.core.models import TeamMetrics, TrackerConfig, ValueCandidate
 from app.data.nhl_api import fetch_goalie_stats, infer_likely_starter
+from app.math.elo import EloTracker, build_elo_ratings
 from app.math.situational import situational_adjustments
 
 log = get_logger("agents")
@@ -469,6 +470,10 @@ class TeamStrengthAgent:
 class EdgeScoringAgent:
     name = "edge-scoring-agent"
 
+    # Ensemble weight: how much to trust Elo vs our logistic model.
+    # 0.0 = pure logistic, 1.0 = pure Elo.  0.25 = light Elo blend.
+    ELO_WEIGHT = 0.25
+
     @staticmethod
     def _estimate_win_probability(
         home_team: str,
@@ -478,12 +483,15 @@ class EdgeScoringAgent:
         goalie_adj: float = 0.0,
         home_advantage: float = 0.14,
         logistic_k: float = 0.9,
+        elo_tracker: EloTracker | None = None,
+        elo_weight: float = 0.25,
     ) -> tuple[float, float, float]:
         """Returns (home_prob, away_prob, confidence).
 
         *sit_adj* is a situational probability adjustment (rest, travel).
         *goalie_adj* is a goalie matchup adjustment (save% differential).
         Both are applied as probability deltas from the home team's perspective.
+        *elo_tracker* if provided, blends Elo probability with logistic model.
         """
         home_metrics = strength.get(home_team)
         away_metrics = strength.get(away_team)
@@ -495,9 +503,17 @@ class EdgeScoringAgent:
         home_z = home_metrics.home_strength
         away_z = away_metrics.away_strength
 
-        home_prob, away_prob = logistic_win_probability(
+        logistic_home, _ = logistic_win_probability(
             home_z, away_z, home_advantage=home_advantage, k=logistic_k
         )
+
+        # Ensemble with Elo if available
+        if elo_tracker is not None:
+            elo_home = elo_tracker.predict(home_team, away_team)
+            home_prob = (1 - elo_weight) * logistic_home + elo_weight * elo_home
+        else:
+            home_prob = logistic_home
+
         # Apply situational + goalie adjustments
         # goalie_adj is in percentage points (e.g. 3.0 = 3pp), convert to probability
         total_adj = sit_adj + goalie_adj / 100.0
@@ -515,6 +531,7 @@ class EdgeScoringAgent:
         team_strength: dict[str, TeamMetrics],
         config: TrackerConfig,
         games_rows: list[dict[str, str]] | None = None,
+        elo_tracker: EloTracker | None = None,
     ) -> list[ValueCandidate]:
         candidates: list[ValueCandidate] = []
         for event in odds_events:
@@ -548,6 +565,7 @@ class EdgeScoringAgent:
                     home_team, away_team, team_strength, sit_adj, g_adj,
                     home_advantage=config.home_advantage,
                     logistic_k=config.logistic_k,
+                    elo_tracker=elo_tracker,
                 )
             )
 

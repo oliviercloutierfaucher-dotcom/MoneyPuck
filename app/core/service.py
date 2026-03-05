@@ -11,6 +11,7 @@ from app.logging_config import get_logger
 from app.core.models import MarketSnapshot, TeamMetrics, TrackerConfig
 from app.data.data_sources import fetch_polymarket_odds
 from app.data.nhl_api import fetch_goalie_stats
+from app.math.elo import build_elo_ratings
 
 log = get_logger("service")
 
@@ -355,9 +356,18 @@ def score_snapshot(
                 ", ".join(sorted(excluded)),
             )
 
+    # Build Elo ratings from historical game data for ensemble
+    elo_tracker = None
+    if games_rows:
+        try:
+            elo_tracker = build_elo_ratings(games_rows)
+            log.info("Elo ratings built for %d teams", len(elo_tracker.ratings))
+        except Exception:
+            log.warning("Elo rating build failed — continuing without Elo ensemble")
+
     edge_agent = EdgeScoringAgent()
     risk_agent = RiskAgent()
-    candidates = edge_agent.run(odds_events, team_strength, config, games_rows)
+    candidates = edge_agent.run(odds_events, team_strength, config, games_rows, elo_tracker)
     recommendations = risk_agent.run(candidates, config)
     log.info(
         "Scoring complete: %d candidates -> %d recommendations",
