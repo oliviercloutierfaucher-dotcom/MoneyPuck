@@ -1,7 +1,14 @@
 """Backtesting framework tests for model calibration and parameter optimization."""
 import math
 
-from app.core.backtester import backtest_season, evaluate_predictions, grid_search
+from app.core.backtester import (
+    backtest_season,
+    evaluate_predictions,
+    format_report,
+    grid_search,
+    production_readiness_report,
+    simulate_betting_roi,
+)
 from app.core.models import TrackerConfig
 
 
@@ -339,3 +346,108 @@ def test_backtest_season_train_window():
                 assert 0.0 < p["home_prob"] < 1.0
                 assert 0.0 < wide_by_key[key]["home_prob"] < 1.0
                 break
+
+
+# ---------------------------------------------------------------------------
+# Test 11: simulate_betting_roi returns expected structure
+# ---------------------------------------------------------------------------
+
+def test_simulate_betting_roi_structure():
+    """ROI simulation should return all required fields with valid values."""
+    config = _default_config()
+    preds = backtest_season(SYNTHETIC_GAMES, config, train_window_days=60)
+    roi = simulate_betting_roi(preds)
+
+    required_keys = {
+        "total_bets", "total_staked", "final_bankroll",
+        "roi_pct", "win_rate", "avg_edge", "max_drawdown_pct",
+        "bets_by_month",
+    }
+    assert required_keys.issubset(roi.keys())
+    assert roi["final_bankroll"] >= 0  # can't go negative
+    assert 0.0 <= roi["win_rate"] <= 1.0
+    assert roi["max_drawdown_pct"] >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test 12: simulate_betting_roi with no edges places no bets
+# ---------------------------------------------------------------------------
+
+def test_simulate_roi_high_min_edge():
+    """With a very high min_edge, no bets should be placed."""
+    config = _default_config()
+    preds = backtest_season(SYNTHETIC_GAMES, config, train_window_days=60)
+    roi = simulate_betting_roi(preds, min_edge=99.0)
+
+    assert roi["total_bets"] == 0
+    assert roi["total_staked"] == 0.0
+    assert roi["final_bankroll"] == 1000.0
+
+
+# ---------------------------------------------------------------------------
+# Test 13: production_readiness_report has verdict
+# ---------------------------------------------------------------------------
+
+def test_production_readiness_report_structure():
+    """Report should include verdict, checks, metrics, and simulated ROI."""
+    config = _default_config()
+    preds = backtest_season(SYNTHETIC_GAMES, config, train_window_days=60)
+    report = production_readiness_report(preds, config)
+
+    assert "verdict" in report
+    assert report["verdict"] in {"PASS", "CONDITIONAL", "FAIL"}
+    assert "verdict_detail" in report
+    assert "checks" in report
+    assert "metrics" in report
+    assert "simulated_roi" in report
+
+    # Checks should include critical items
+    assert "brier_score" in report["checks"]
+    assert "accuracy" in report["checks"]
+    assert "sample_size" in report["checks"]
+    assert "simulated_roi" in report["checks"]
+
+    # Each check has pass/fail
+    for name, check in report["checks"].items():
+        assert "pass" in check, f"Check {name} missing 'pass' field"
+        assert "value" in check
+        assert "threshold" in check
+
+
+# ---------------------------------------------------------------------------
+# Test 14: format_report produces non-empty string
+# ---------------------------------------------------------------------------
+
+def test_format_report_output():
+    """Formatted report should be a non-empty string with key sections."""
+    config = _default_config()
+    preds = backtest_season(SYNTHETIC_GAMES, config, train_window_days=60)
+    report = production_readiness_report(preds, config)
+    text = format_report(report)
+
+    assert len(text) > 100
+    assert "VERDICT" in text
+    assert "CALIBRATION" in text
+    assert "SIMULATED BETTING" in text
+    # Depending on verdict, report shows either "NEXT STEPS" or "MODEL IS NOT READY"
+    assert "NEXT STEPS" in text or "MODEL IS NOT READY" in text
+
+
+# ---------------------------------------------------------------------------
+# Test 15: perfect predictions get good scores
+# ---------------------------------------------------------------------------
+
+def test_readiness_report_good_model():
+    """A model with near-perfect predictions should score well on checks."""
+    # Create lots of well-calibrated predictions
+    preds = []
+    for i in range(300):
+        # Model predicts 60% home win, home actually wins 60% of the time
+        if i % 5 < 3:  # 60% home wins
+            preds.append({"home_prob": 0.60, "actual_outcome": 1, "game_date": f"2024-01-{(i % 28) + 1:02d}"})
+        else:
+            preds.append({"home_prob": 0.40, "actual_outcome": 0, "game_date": f"2024-01-{(i % 28) + 1:02d}"})
+
+    report = production_readiness_report(preds)
+    assert report["checks"]["sample_size"]["pass"] is True
+    assert report["checks"]["accuracy"]["pass"] is True

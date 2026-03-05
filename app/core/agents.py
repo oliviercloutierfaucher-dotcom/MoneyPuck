@@ -570,6 +570,16 @@ class EdgeScoringAgent:
                         ev = expected_value_per_dollar(model_p, decimal_odds)
                         kelly = kelly_fraction(model_p, decimal_odds)
 
+                        # Hard cap: reject edges that are almost certainly model artifacts
+                        max_edge = getattr(config, "max_edge", 10.0)
+                        if edge_pp > max_edge:
+                            log.info(
+                                "Rejected %s %s @ %s: edge %.1fpp exceeds cap %.1fpp",
+                                side, home_team if side == home_team else away_team,
+                                bookmaker.get("title", "?"), edge_pp, max_edge,
+                            )
+                            continue
+
                         if edge_pp >= config.min_edge and ev >= config.min_ev:
                             # Penalize suspiciously large edges
                             adj_conf = edge_adjusted_confidence(conf, edge_pp)

@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-fraction-per-bet", type=float, default=0.03)
     parser.add_argument("--kelly-fraction", type=float, default=0.5, help="Kelly multiplier (0.5 = half-Kelly)")
     parser.add_argument("--max-nightly-exposure", type=float, default=0.15, help="Max total stake per night as fraction of bankroll")
+    parser.add_argument("--max-edge", type=float, default=10.0, help="Reject edges above this (pp) — likely model error, not real opportunity")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
     parser.add_argument("--army", action="store_true", help="Run all betting-agent profiles in parallel")
     parser.add_argument("--persist", action="store_true", help="Save predictions to SQLite database")
@@ -203,6 +204,7 @@ def main() -> int:
         kelly_fraction=args.kelly_fraction,
         max_nightly_exposure=args.max_nightly_exposure,
         persist=args.persist,
+        max_edge=args.max_edge,
         half_life=args.half_life,
         regression_k=args.regression_k,
         home_advantage=args.home_advantage,
@@ -223,15 +225,21 @@ def main() -> int:
             return 0
 
         if args.backtest:
-            from app.core.backtester import backtest_season, evaluate_predictions
+            from app.core.backtester import (
+                backtest_season,
+                format_report,
+                production_readiness_report,
+            )
             from app.data.data_sources import fetch_moneypuck_games
             log.info("Starting backtest for season %d", config.season)
             games = fetch_moneypuck_games(config.season)
             log.info("Backtesting %d games", len(games))
             preds = backtest_season(games, config)
-            report = evaluate_predictions(preds)
-            report["n_predictions"] = len(preds)
-            print(json.dumps(report, indent=2))
+            report = production_readiness_report(preds, config)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            else:
+                print(format_report(report))
             return 0
 
         if args.army:
@@ -240,8 +248,17 @@ def main() -> int:
             return 0
 
         if args.tonight:
-            from app.core.service import build_market_snapshot, score_snapshot
+            from app.core.service import build_market_snapshot, check_data_freshness, score_snapshot
             snapshot, games_rows = build_market_snapshot(config)
+
+            # Surface data quality warnings to the user
+            freshness_warnings = check_data_freshness(snapshot)
+            if freshness_warnings:
+                print(f"\n  DATA QUALITY WARNINGS:", file=sys.stderr)
+                for w in freshness_warnings:
+                    print(f"  - {w}", file=sys.stderr)
+                print(file=sys.stderr)
+
             recommendations = score_snapshot(snapshot, config, games_rows)
 
             if config.persist and recommendations:

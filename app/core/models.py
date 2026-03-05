@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
@@ -67,6 +68,8 @@ class TrackerConfig:
     kelly_fraction: float = 0.5
     max_nightly_exposure: float = 0.15
     persist: bool = False
+    # Safety limits
+    max_edge: float = 10.0  # Reject edges above this (pp) — likely model error
     # Tunable model parameters
     half_life: float = 30.0
     regression_k: int = 20
@@ -82,3 +85,8 @@ class MarketSnapshot:
     odds_events: list[dict[str, Any]] = field(default_factory=list)
     team_strength: dict[str, TeamMetrics] = field(default_factory=dict)
     goalie_stats: list[dict[str, Any]] = field(default_factory=list)
+    # Data freshness tracking
+    fetched_at: datetime | None = None
+    odds_source: str = "unknown"        # "live", "empty", "timeout"
+    strength_source: str = "unknown"    # "team_gbg", "bulk_csv", "empty", "timeout"
+    teams_fetched: int = 0              # number of teams with strength data

@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 from app.core.agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgent, RiskAgent, TeamStrengthAgent
 from app.logging_config import get_logger
@@ -10,6 +11,9 @@ from app.core.models import MarketSnapshot, TrackerConfig
 from app.data.nhl_api import fetch_goalie_stats
 
 log = get_logger("service")
+
+# Maximum age of data before we refuse to generate recommendations (seconds)
+MAX_DATA_AGE_SECONDS = 6 * 3600  # 6 hours
 
 
 def _fetch_goalies_safe() -> list[dict]:
@@ -67,18 +71,71 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     if not odds_events:
         log.warning("No odds events received — recommendations will be empty")
 
+    # Determine data sources for staleness tracking
+    odds_source = "live" if odds_events else "empty"
+    if not odds_events and not games_rows:
+        strength_source = "empty"
+    elif games_rows and games_rows[0].get("playerTeam"):
+        strength_source = "team_gbg"
+    elif games_rows:
+        strength_source = "bulk_csv"
+    else:
+        strength_source = "empty"
+
     log.info(
-        "Snapshot data: %d odds events, %d game rows, %d goalies",
+        "Snapshot data: %d odds events, %d game rows, %d goalies (odds=%s, strength=%s)",
         len(odds_events), len(games_rows), len(goalie_stats),
+        odds_source, strength_source,
     )
+
+    team_strength = strength_agent.run(games_rows, config, goalie_stats)
 
     snapshot = MarketSnapshot(
         odds_events=odds_events,
-        team_strength=strength_agent.run(games_rows, config, goalie_stats),
+        team_strength=team_strength,
         goalie_stats=goalie_stats,
+        fetched_at=datetime.now(),
+        odds_source=odds_source,
+        strength_source=strength_source,
+        teams_fetched=len(team_strength),
     )
     log.info("Team strength computed for %d teams", len(snapshot.team_strength))
     return snapshot, games_rows
+
+
+def check_data_freshness(snapshot: MarketSnapshot) -> list[str]:
+    """Return a list of warning/error strings if data is stale or degraded.
+
+    Empty list means data is fresh and reliable.
+    """
+    warnings: list[str] = []
+
+    if snapshot.odds_source == "empty":
+        warnings.append("CRITICAL: No odds data — cannot generate reliable recommendations")
+    if snapshot.odds_source == "timeout":
+        warnings.append("WARNING: Odds API timed out — data may be stale")
+
+    if snapshot.strength_source == "empty":
+        warnings.append("CRITICAL: No team strength data — model has no signal")
+    elif snapshot.strength_source == "bulk_csv":
+        warnings.append("WARNING: Using bulk CSV fallback — data may be stale (team GBG preferred)")
+
+    if snapshot.teams_fetched < 20:
+        warnings.append(
+            f"WARNING: Only {snapshot.teams_fetched} teams have strength data "
+            f"(expected 30+) — missing teams will default to 50/50"
+        )
+
+    if snapshot.fetched_at:
+        age = (datetime.now() - snapshot.fetched_at).total_seconds()
+        if age > MAX_DATA_AGE_SECONDS:
+            hours = age / 3600
+            warnings.append(
+                f"CRITICAL: Data is {hours:.1f} hours old (max {MAX_DATA_AGE_SECONDS / 3600:.0f}h). "
+                f"Re-fetch before placing bets."
+            )
+
+    return warnings
 
 
 def score_snapshot(
@@ -86,7 +143,29 @@ def score_snapshot(
     config: TrackerConfig,
     games_rows: list[dict[str, str]] | None = None,
 ) -> list[dict[str, object]]:
-    """Score one config against an already-fetched market snapshot."""
+    """Score one config against an already-fetched market snapshot.
+
+    Checks data freshness first. If critical data issues are detected,
+    logs warnings. Callers should check snapshot.odds_source and
+    snapshot.strength_source before acting on recommendations.
+    """
+    # Data freshness warnings
+    freshness_warnings = check_data_freshness(snapshot)
+    for w in freshness_warnings:
+        if w.startswith("CRITICAL"):
+            log.error(w)
+        else:
+            log.warning(w)
+
+    # Block recommendations on critically bad data
+    critical = [w for w in freshness_warnings if w.startswith("CRITICAL")]
+    if critical:
+        log.error(
+            "Refusing to generate recommendations due to data quality issues: %s",
+            "; ".join(critical),
+        )
+        return []
+
     edge_agent = EdgeScoringAgent()
     risk_agent = RiskAgent()
     candidates = edge_agent.run(
