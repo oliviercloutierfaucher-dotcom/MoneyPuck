@@ -332,6 +332,39 @@ def render_dashboard(data: dict[str, Any]) -> str:
       display: flex; justify-content: space-between; align-items: center;
       color: var(--amber); font-weight: 500;
     }}
+    /* Sparkline strip in card footer */
+    .sparkline-strip {{
+      display: flex; align-items: center; gap: 8px; padding-top: 4px;
+    }}
+    .sparkline-strip svg {{ flex-shrink: 0; }}
+    .sparkline-label {{
+      font-size: 10px; color: var(--muted); white-space: nowrap; flex-shrink: 0;
+    }}
+    .sparkline-label .spark-open {{ color: var(--text-2); }}
+    .sparkline-label .spark-current {{ font-weight: 700; }}
+    .sparkline-label .spark-up {{ color: var(--green); }}
+    .sparkline-label .spark-down {{ color: var(--red); }}
+    .sparkline-label .spark-flat {{ color: var(--muted); }}
+    /* Larger sparkline chart in modal */
+    .modal-sparkline {{
+      width: 100%; overflow: hidden; background: var(--panel-2);
+      border-radius: var(--radius-sm); padding: 12px 16px;
+      margin-bottom: 12px;
+    }}
+    .modal-sparkline svg {{ width: 100%; height: 80px; display: block; }}
+    .modal-sparkline-labels {{
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--muted); margin-top: 6px;
+    }}
+    .modal-sparkline-legend {{
+      display: flex; gap: 12px; font-size: 10px; margin-top: 4px;
+    }}
+    .modal-sparkline-legend .leg-home {{
+      display: flex; align-items: center; gap: 4px; color: var(--accent);
+    }}
+    .modal-sparkline-legend .leg-away {{
+      display: flex; align-items: center; gap: 4px; color: var(--amber);
+    }}
     .edge-badge {{
       display: inline-flex; padding: 1px 6px; border-radius: 4px;
       font-weight: 700; font-size: 10px; letter-spacing: 0.02em;
@@ -567,6 +600,124 @@ def render_dashboard(data: dict[str, Any]) -> str:
     }}
     @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
 
+    /* ---- CLV TRACKER ---- */
+    .clv-panel {{
+      background: var(--panel-solid); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 20px;
+      margin-bottom: 20px; display: flex; align-items: center; gap: 0;
+    }}
+    .clv-panel.clv-positive {{ border-color: var(--green-border); box-shadow: 0 0 16px var(--green-glow); }}
+    .clv-panel.clv-negative {{ border-color: rgba(239,68,68,0.2); }}
+    .clv-header {{
+      display: flex; align-items: center; gap: 10px;
+      margin-right: 24px; min-width: 140px;
+    }}
+    .clv-icon {{
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 900; color: #fff; flex-shrink: 0;
+    }}
+    .clv-title {{ font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }}
+    .clv-subtitle {{ font-size: 11px; color: var(--muted); margin-top: 1px; }}
+    .clv-kpis {{
+      display: flex; gap: 0; flex: 1; align-items: stretch;
+      border-left: 1px solid var(--border); padding-left: 20px;
+    }}
+    .clv-kpi {{
+      flex: 1; padding: 4px 16px; border-right: 1px solid var(--border);
+      text-align: center; min-width: 0;
+    }}
+    .clv-kpi:last-child {{ border-right: none; }}
+    .clv-kpi .kpi-label {{ color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }}
+    .clv-kpi .kpi-value {{ font-size: 22px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }}
+    .clv-kpi .kpi-sub {{ color: var(--muted); font-size: 10px; margin-top: 1px; }}
+    .clv-kpi.positive .kpi-value {{ color: var(--green); }}
+    .clv-kpi.negative .kpi-value {{ color: var(--red); }}
+    .clv-kpi.neutral .kpi-value {{ color: var(--text-2); }}
+    .clv-empty {{ color: var(--muted); font-size: 12px; padding: 4px 16px; }}
+
+    /* ---- PERFORMANCE TRACKER ---- */
+    .perf-section {{ margin-bottom: 28px; }}
+    .perf-empty {{
+      background: var(--panel-solid); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px 20px; text-align: center;
+      color: var(--muted); font-size: 13px;
+    }}
+    .perf-chart-wrap {{
+      background: var(--panel-solid); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px; margin-bottom: 12px;
+      overflow-x: auto;
+    }}
+    .perf-chart-title {{
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); margin-bottom: 14px;
+    }}
+    .perf-bar-chart {{
+      display: flex; align-items: flex-end; gap: 8px;
+      height: 100px; position: relative;
+    }}
+    .perf-bar-col {{
+      display: flex; flex-direction: column; align-items: center;
+      flex: 1; min-width: 36px; max-width: 72px; gap: 4px;
+    }}
+    .perf-bar {{
+      width: 100%; border-radius: 4px 4px 0 0;
+      transition: opacity 0.15s;
+      min-height: 3px;
+    }}
+    .perf-bar.positive {{ background: var(--green); }}
+    .perf-bar.negative {{ background: var(--red); border-radius: 0 0 4px 4px; }}
+    .perf-bar-label {{
+      font-size: 9px; color: var(--muted); text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    }}
+    .perf-bar-value {{
+      font-size: 9px; font-weight: 700; color: var(--text-2); text-align: center;
+    }}
+    .perf-two-col {{
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;
+    }}
+    @media (max-width: 600px) {{ .perf-two-col {{ grid-template-columns: 1fr; }} }}
+    .perf-book-table-wrap {{
+      background: var(--panel-solid); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: auto;
+    }}
+    .perf-book-table {{ border-collapse: collapse; width: 100%; }}
+    .perf-book-table th {{
+      padding: 9px 12px; text-align: left;
+      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600;
+      background: var(--panel-2); border-bottom: 1px solid var(--border);
+    }}
+    .perf-book-table td {{
+      padding: 7px 12px; border-bottom: 1px solid var(--border);
+      font-size: 12px; font-variant-numeric: tabular-nums;
+    }}
+    .perf-book-table tr:last-child td {{ border-bottom: none; }}
+    .perf-book-table tr:hover td {{ background: var(--accent-glow); }}
+    .perf-recent-wrap {{
+      background: var(--panel-solid); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: auto;
+    }}
+    .perf-recent-list {{ list-style: none; }}
+    .perf-recent-item {{
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; border-bottom: 1px solid var(--border);
+      font-size: 12px; font-variant-numeric: tabular-nums;
+    }}
+    .perf-recent-item:last-child {{ border-bottom: none; }}
+    .perf-result-badge {{
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 6px;
+      font-weight: 800; font-size: 11px; flex-shrink: 0;
+    }}
+    .perf-result-badge.win {{ background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }}
+    .perf-result-badge.loss {{ background: rgba(239,68,68,0.08); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }}
+    .perf-recent-meta {{ color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }}
+    .perf-profit.pos {{ color: var(--green); font-weight: 700; }}
+    .perf-profit.neg {{ color: var(--red); font-weight: 700; }}
+
     /* ---- FOOTER ---- */
     .footer {{
       text-align: center; padding: 20px; color: var(--muted);
@@ -576,6 +727,38 @@ def render_dashboard(data: dict[str, Any]) -> str:
       background: var(--panel-2); padding: 2px 5px;
       border-radius: 4px; border: 1px solid var(--border); font-size: 11px;
     }}
+
+    /* ---- PROPS ---- */
+    .props-chip {{
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 10px; padding: 2px 8px; font-size: 10px; font-weight: 600;
+      color: #a78bfa; letter-spacing: 0.02em; cursor: default;
+    }}
+    .props-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+    .props-table th {{
+      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600; padding: 5px 6px;
+      text-align: left; border-bottom: 1px solid var(--border);
+    }}
+    .props-table td {{
+      padding: 5px 6px; border-bottom: 1px solid rgba(30,41,59,0.3);
+      font-variant-numeric: tabular-nums;
+    }}
+    .props-table tr:last-child td {{ border-bottom: none; }}
+    .props-table tr.wide-spread td {{ background: rgba(245,158,11,0.06); }}
+    .props-table .spread-col {{ font-weight: 700; }}
+    .props-table .spread-wide {{ color: var(--amber); }}
+    .props-table .spread-tight {{ color: var(--green); }}
+    .props-table td a {{ color: var(--accent); text-decoration: none; }}
+    .props-table td a:hover {{ text-decoration: underline; }}
+    .props-edge-note {{
+      margin-top: 8px; padding: 6px 10px; border-radius: 6px;
+      background: var(--amber-bg); border: 1px solid rgba(245,158,11,0.2);
+      font-size: 11px; color: var(--amber);
+    }}
+    .props-edge-row {{ margin-bottom: 3px; }}
+    .props-edge-row:last-child {{ margin-bottom: 0; }}
 
     /* ---- THEME TOGGLE ---- */
     .theme-toggle {{
@@ -594,6 +777,88 @@ def render_dashboard(data: dict[str, Any]) -> str:
     [data-theme="light"] .top-bet-row .rank {{ color: #fff; }}
     [data-theme="light"] .value-table tr:nth-child(even) td {{ background: rgba(241,245,249,0.5); }}
     [data-theme="light"] .value-table tr:hover td {{ background: rgba(8,145,178,0.06); }}
+
+    /* ---- HEDGE CALCULATOR ---- */
+    .hedge-panel {{
+      background: var(--panel-solid); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 16px; overflow: hidden;
+    }}
+    .hedge-toggle {{
+      width: 100%; display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 16px; background: none; border: none; cursor: pointer;
+      color: var(--text); font-family: inherit; font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+    }}
+    .hedge-toggle:hover {{ background: var(--panel-2); }}
+    .hedge-toggle .hedge-toggle-label {{ display: flex; align-items: center; gap: 8px; color: var(--accent); }}
+    .hedge-toggle .hedge-caret {{
+      color: var(--muted); font-size: 10px; transition: transform 0.2s;
+    }}
+    .hedge-toggle.open .hedge-caret {{ transform: rotate(180deg); }}
+    .hedge-body {{
+      display: none; padding: 16px; border-top: 1px solid var(--border);
+    }}
+    .hedge-body.open {{ display: block; }}
+    .hedge-inputs {{
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px;
+    }}
+    .hedge-field {{
+      display: flex; flex-direction: column; gap: 4px;
+    }}
+    .hedge-field label {{
+      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600;
+    }}
+    .hedge-field input {{
+      background: var(--panel-2); border: 1px solid var(--border-2);
+      border-radius: 6px; padding: 6px 10px; color: var(--text);
+      font-size: 13px; width: 110px; font-family: inherit;
+    }}
+    .hedge-field input:focus {{ outline: none; border-color: var(--accent); }}
+    .hedge-mode-toggle {{
+      display: flex; gap: 4px;
+    }}
+    .hedge-mode-btn {{
+      padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+      cursor: pointer; border: 1px solid var(--border-2);
+      background: var(--panel-2); color: var(--text-2); font-family: inherit;
+      transition: all 0.15s;
+    }}
+    .hedge-mode-btn.active {{
+      background: var(--accent-glow); border-color: var(--accent); color: var(--accent);
+    }}
+    .hedge-results {{
+      display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+    }}
+    .hedge-results.visible {{ display: block; }}
+    .hedge-results-grid {{
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px;
+      margin-bottom: 12px;
+    }}
+    .hedge-stat {{
+      background: var(--panel-2); border-radius: var(--radius-sm); padding: 10px 12px;
+    }}
+    .hedge-stat .hs-label {{
+      color: var(--muted); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 600;
+    }}
+    .hedge-stat .hs-value {{
+      font-size: 18px; font-weight: 800; margin-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }}
+    .hedge-stat .hs-value.green {{ color: var(--green); }}
+    .hedge-stat .hs-value.red {{ color: var(--red); }}
+    .hedge-stat .hs-value.amber {{ color: var(--amber); }}
+    .hedge-cashout {{
+      background: var(--panel-2); border-radius: var(--radius-sm); padding: 10px 14px;
+      display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px;
+    }}
+    .hedge-cashout .hc-item {{ display: flex; flex-direction: column; gap: 2px; }}
+    .hedge-cashout .hc-label {{ color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }}
+    .hedge-cashout .hc-value {{ font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }}
+    .hedge-error {{
+      color: var(--red); font-size: 12px; margin-top: 8px; display: none;
+    }}
 
     /* ---- RESPONSIVE ---- */
     @media (max-width: 768px) {{
@@ -666,6 +931,69 @@ def render_dashboard(data: dict[str, Any]) -> str:
     </div>
   </div>
 
+  <!-- HEDGE CALCULATOR -->
+  <div class="hedge-panel">
+    <button class="hedge-toggle" id="hedge-toggle" onclick="toggleHedge()" aria-expanded="false" aria-controls="hedge-body">
+      <span class="hedge-toggle-label">&#9881; Hedge Calculator</span>
+      <span class="hedge-caret">&#9660;</span>
+    </button>
+    <div class="hedge-body" id="hedge-body" role="region" aria-label="Hedge Calculator">
+      <div class="hedge-inputs">
+        <div class="hedge-field">
+          <label for="hc-orig-odds">Original Odds (decimal)</label>
+          <input id="hc-orig-odds" type="number" step="0.01" min="1.01" placeholder="e.g. 2.50" oninput="calcHedge()">
+        </div>
+        <div class="hedge-field">
+          <label for="hc-orig-stake">Original Stake ($)</label>
+          <input id="hc-orig-stake" type="number" step="1" min="1" placeholder="e.g. 100" oninput="calcHedge()">
+        </div>
+        <div class="hedge-field">
+          <label for="hc-hedge-odds">Hedge Odds (decimal)</label>
+          <input id="hc-hedge-odds" type="number" step="0.01" min="1.01" placeholder="e.g. 2.10" oninput="calcHedge()">
+        </div>
+        <div class="hedge-field">
+          <label>Mode</label>
+          <div class="hedge-mode-toggle">
+            <button class="hedge-mode-btn active" id="hm-lock" onclick="setHedgeMode('lock_profit')">Lock Profit</button>
+            <button class="hedge-mode-btn" id="hm-min" onclick="setHedgeMode('minimize_loss')">Min Loss</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hedge-error" id="hedge-error"></div>
+
+      <div class="hedge-results" id="hedge-results">
+        <div class="hedge-results-grid">
+          <div class="hedge-stat">
+            <div class="hs-label">Hedge Stake</div>
+            <div class="hs-value amber" id="hs-stake">$0</div>
+          </div>
+          <div class="hedge-stat">
+            <div class="hs-label">If Original Wins</div>
+            <div class="hs-value" id="hs-orig-win">$0</div>
+          </div>
+          <div class="hedge-stat">
+            <div class="hs-label">If Hedge Wins</div>
+            <div class="hs-value" id="hs-hedge-win">$0</div>
+          </div>
+          <div class="hedge-stat">
+            <div class="hs-label">Guaranteed Profit</div>
+            <div class="hs-value green" id="hs-guaranteed">$0</div>
+          </div>
+          <div class="hedge-stat">
+            <div class="hs-label">ROI</div>
+            <div class="hs-value" id="hs-roi">0%</div>
+          </div>
+        </div>
+        <div class="hedge-cashout" id="hedge-cashout-row">
+          <div class="hc-item"><div class="hc-label">Fair Cashout Value</div><div class="hc-value" id="hc-fair">$0</div></div>
+          <div class="hc-item"><div class="hc-label">Cashout Profit</div><div class="hc-value" id="hc-profit">$0</div></div>
+          <div class="hc-item"><div class="hc-label">EV if Hold</div><div class="hc-value" id="hc-ev">$0</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- BOOK FILTER -->
   <div class="books-bar" id="books-bar">
     <span class="label">Books</span>
@@ -691,6 +1019,20 @@ def render_dashboard(data: dict[str, Any]) -> str:
     <div class="meter">
       <div class="meter-track"><div class="meter-fill" id="meter-fill" style="width:0%"></div></div>
       <div class="meter-labels"><span>0%</span><span id="meter-pct">0%</span><span>Cap 15%</span></div>
+    </div>
+  </div>
+
+  <!-- CLV TRACKER -->
+  <div class="clv-panel" id="clv-panel">
+    <div class="clv-header">
+      <div class="clv-icon">CLV</div>
+      <div>
+        <div class="clv-title">CLV Tracker</div>
+        <div class="clv-subtitle">Closing Line Value</div>
+      </div>
+    </div>
+    <div class="clv-kpis" id="clv-kpis">
+      <div class="clv-empty">No CLV data yet &mdash; settle predictions to track closing line value</div>
     </div>
   </div>
 
@@ -731,9 +1073,42 @@ def render_dashboard(data: dict[str, Any]) -> str:
     </div>
   </div>
 
+  <!-- PERFORMANCE TRACKER (lazy-loaded) -->
+  <div class="perf-section" id="perf-section">
+    <div class="section-title">Performance Tracker</div>
+    <div class="perf-empty" id="perf-placeholder">Loading performance data...</div>
+    <div id="perf-content" style="display:none">
+      <!-- KPI strip -->
+      <div class="kpi-strip" style="margin-bottom:12px" id="perf-kpis"></div>
+      <!-- Bar chart -->
+      <div class="perf-chart-wrap" id="perf-chart-wrap">
+        <div class="perf-chart-title">Monthly P&amp;L ($)</div>
+        <div class="perf-bar-chart" id="perf-bar-chart"></div>
+      </div>
+      <!-- Two-column: book table + recent bets -->
+      <div class="perf-two-col">
+        <div>
+          <div class="section-title" style="margin-bottom:8px">By Sportsbook</div>
+          <div class="perf-book-table-wrap">
+            <table class="perf-book-table">
+              <thead><tr><th>Book</th><th>Bets</th><th>P&amp;L</th><th>ROI%</th></tr></thead>
+              <tbody id="perf-book-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="section-title" style="margin-bottom:8px">Recent Settled Bets</div>
+          <div class="perf-recent-wrap">
+            <ul class="perf-recent-list" id="perf-recent-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="footer">
     Model: 16-metric composite | Logistic win probability | Confidence-adj Kelly<br>
-    API: <code>/api/dashboard</code> | <code>/api/opportunities</code>
+    API: <code>/api/dashboard</code> | <code>/api/opportunities</code> | <code>/api/performance</code>
   </div>
 </div>
 
@@ -854,6 +1229,62 @@ function dec(am) {{ return am > 0 ? (am/100 + 1).toFixed(2) : (100/Math.abs(am) 
 function pct(v) {{ return (v * 100).toFixed(1) + '%'; }}
 function n(v, d) {{ return Number(v).toFixed(d || 2); }}
 
+/* ---- CLV TRACKER ---- */
+function renderClv(clv) {{
+  const panel = document.getElementById('clv-panel');
+  const kpisEl = document.getElementById('clv-kpis');
+  if (!clv || !clv.total_bets) {{
+    kpisEl.innerHTML = '<div class="clv-empty">No CLV data yet &mdash; settle predictions to track closing line value</div>';
+    panel.className = 'clv-panel';
+    return;
+  }}
+
+  const avgClv = Number(clv.avg_clv_cents);
+  const pctBeat = Number(clv.pct_beating_close);
+  const total = clv.total_bets;
+
+  const avgClass = avgClv > 0 ? 'positive' : avgClv < 0 ? 'negative' : 'neutral';
+  const sign = avgClv > 0 ? '+' : '';
+  const beatPct = (pctBeat * 100).toFixed(1);
+  const beatClass = pctBeat >= 0.55 ? 'positive' : pctBeat >= 0.45 ? 'neutral' : 'negative';
+
+  // Per-book breakdown (top 4 books by sample size)
+  const byBook = clv.clv_by_book || {{}};
+  const bookEntries = Object.entries(byBook)
+    .sort((a, b) => b[1].total_bets - a[1].total_bets)
+    .slice(0, 4);
+  const bookHtml = bookEntries.map(([book, stats]) => {{
+    const bc = Number(stats.avg_clv_cents);
+    const bClass = bc > 0 ? 'positive' : bc < 0 ? 'negative' : 'neutral';
+    const bSign = bc > 0 ? '+' : '';
+    return `<div class="clv-kpi ${{bClass}}">
+      <div class="kpi-label">${{esc(book)}}</div>
+      <div class="kpi-value">${{bSign}}${{n(bc, 1)}}¢</div>
+      <div class="kpi-sub">${{stats.total_bets}} bets</div>
+    </div>`;
+  }}).join('');
+
+  panel.className = 'clv-panel' + (avgClv > 0 ? ' clv-positive' : avgClv < 0 ? ' clv-negative' : '');
+  kpisEl.innerHTML = `
+    <div class="clv-kpi ${{avgClass}}">
+      <div class="kpi-label">Avg CLV</div>
+      <div class="kpi-value">${{sign}}${{n(avgClv, 1)}}¢</div>
+      <div class="kpi-sub">per bet</div>
+    </div>
+    <div class="clv-kpi ${{beatClass}}">
+      <div class="kpi-label">Beat Close</div>
+      <div class="kpi-value">${{beatPct}}%</div>
+      <div class="kpi-sub">of bets</div>
+    </div>
+    <div class="clv-kpi neutral">
+      <div class="kpi-label">Sample</div>
+      <div class="kpi-value">${{total}}</div>
+      <div class="kpi-sub">settled bets</div>
+    </div>
+    ${{bookHtml}}
+  `;
+}}
+
 function render(data) {{
   currentData = data;
   const games = data.games || [];
@@ -903,6 +1334,8 @@ function render(data) {{
   fill.style.width = Math.min(exposurePct, 100) + '%';
   fill.className = 'meter-fill' + (exposurePct > 15 ? ' warn' : '');
   document.getElementById('meter-pct').textContent = n(exposurePct, 1) + '%';
+
+  renderClv(data.clv || null);
 
   document.getElementById('plays-count').textContent = bets.length;
   renderPlays(bets);
@@ -981,6 +1414,110 @@ function renderArbs(arbs) {{
   }}).join('');
 }}
 
+/* ---- SPARKLINE RENDERING (pure inline SVG) ---- */
+
+/**
+ * Build an SVG polyline sparkline from an array of y-values (0-1 probabilities).
+ * @param {{number[]}} pts   - array of probability values in [0,1]
+ * @param {{number}} w       - total width in px
+ * @param {{number}} h       - total height in px
+ * @param {{string}} color   - stroke color (CSS value)
+ * @param {{boolean}} dashed - whether to use a dashed stroke
+ * @returns {{string}} - SVG <polyline> element string
+ */
+function buildSparkPolyline(pts, w, h, color, dashed) {{
+  if (!pts || pts.length < 2) return '';
+  const pad = 3;
+  const minV = Math.min(...pts);
+  const maxV = Math.max(...pts);
+  const range = maxV - minV || 0.01;
+  const coords = pts.map((v, i) => {{
+    const x = pad + (i / (pts.length - 1)) * (w - 2 * pad);
+    const y = (h - pad) - ((v - minV) / range) * (h - 2 * pad);
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }}).join(' ');
+  const dashAttr = dashed ? ' stroke-dasharray="4 3"' : '';
+  return `<polyline points="${{coords}}" fill="none" stroke="${{color}}" stroke-width="1.5"${{dashAttr}} stroke-linecap="round" stroke-linejoin="round"/>`;
+}}
+
+/**
+ * Render a mini sparkline strip for a game card.
+ * Uses g.sparkline if present (demo mode pre-populated) or fetches lazily.
+ * @param {{object}} g - game object
+ * @returns {{string}} HTML string for the sparkline strip
+ */
+function renderCardSparkline(g) {{
+  const data = g.sparkline || [];
+  if (!data.length) return '';
+
+  const pts = data.map(d => d.home_implied);
+  const w = 120, h = 24;
+  const first = pts[0], last = pts[pts.length - 1];
+  const shift = last - first;
+  const color = shift > 0.005 ? 'var(--green)' : shift < -0.005 ? 'var(--red)' : 'var(--muted)';
+  const dirClass = shift > 0.005 ? 'spark-up' : shift < -0.005 ? 'spark-down' : 'spark-flat';
+  const sign = shift > 0 ? '+' : '';
+  const shiftPp = (shift * 100).toFixed(1);
+
+  const polyline = buildSparkPolyline(pts, w, h, color, false);
+  const openPct = (first * 100).toFixed(0);
+  const nowPct = (last * 100).toFixed(0);
+
+  return `<div class="sparkline-strip">
+    <svg width="${{w}}" height="${{h}}" viewBox="0 0 ${{w}} ${{h}}" xmlns="http://www.w3.org/2000/svg">
+      ${{polyline}}
+    </svg>
+    <span class="sparkline-label">
+      <span class="spark-open">${{openPct}}%</span>
+      <span class="spark-flat"> → </span>
+      <span class="spark-current ${{dirClass}}">${{nowPct}}%</span>
+      <span class="${{dirClass}}"> (${{sign}}${{shiftPp}}pp)</span>
+    </span>
+  </div>`;
+}}
+
+/**
+ * Render a full-width dual-line sparkline for the game modal.
+ * Shows home (solid accent) and away (dashed amber) implied probability over time.
+ * @param {{object}} g - game object
+ * @returns {{string}} HTML string for the modal sparkline section
+ */
+function renderModalSparkline(g) {{
+  const data = g.sparkline || [];
+  if (data.length < 2) return '';
+
+  const homePts = data.map(d => d.home_implied);
+  const awayPts = data.map(d => d.away_implied);
+  const times = data.map(d => d.time);
+
+  // Use a fixed viewBox width so SVG scales naturally with CSS width:100%
+  const vw = 400, vh = 80;
+  const homeLine = buildSparkPolyline(homePts, vw, vh, 'var(--accent)', false);
+  const awayLine = buildSparkPolyline(awayPts, vw, vh, 'var(--amber)', true);
+
+  const firstTime = times[0] || '';
+  const lastTime = times[times.length - 1] || '';
+  const homeOpen = (homePts[0] * 100).toFixed(1);
+  const homeNow = (homePts[homePts.length - 1] * 100).toFixed(1);
+  const awayOpen = (awayPts[0] * 100).toFixed(1);
+  const awayNow = (awayPts[awayPts.length - 1] * 100).toFixed(1);
+
+  return `<div class="modal-sparkline">
+    <svg viewBox="0 0 ${{vw}} ${{vh}}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      ${{homeLine}}
+      ${{awayLine}}
+    </svg>
+    <div class="modal-sparkline-labels">
+      <span>${{firstTime}}</span>
+      <span>${{lastTime}}</span>
+    </div>
+    <div class="modal-sparkline-legend">
+      <span class="leg-home">&#9644; ${{esc(g.home)}} ${{homeOpen}}% → ${{homeNow}}%</span>
+      <span class="leg-away">&#9148; ${{esc(g.away)}} ${{awayOpen}}% → ${{awayNow}}%</span>
+    </div>
+  </div>`;
+}}
+
 /* ---- GAME CARD (Polymarket-inspired) ---- */
 function renderGameCard(g, bets, idx) {{
   const hasValue = bets.some(b => (b.home_team === g.home && b.away_team === g.away) || (b.home_team === g.away && b.away_team === g.home));
@@ -1011,7 +1548,8 @@ function renderGameCard(g, bets, idx) {{
         <span class="edge-badge ${{edgeClass}}">${{sign}}${{polyDiff}}pp</span>
       </div>`;
     }}
-    footer = `<div class="card-footer">${{lines}}${{polyLine}}</div>`;
+    const sparklineHtml = renderCardSparkline(g);
+    footer = `<div class="card-footer">${{lines}}${{polyLine}}${{sparklineHtml}}</div>`;
   }}
 
   return `
@@ -1024,6 +1562,7 @@ function renderGameCard(g, bets, idx) {{
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           ${{hasValue ? '<span class="game-value-tag">VALUE</span>' : ''}}
+          ${{(g.props && g.props.length) ? '<span class="props-chip">' + g.props.length + ' props</span>' : ''}}
           <span class="game-time">${{time}}</span>
         </div>
       </div>
@@ -1183,6 +1722,64 @@ function openGameModal(idx) {{
     </div>`;
   }}
 
+  // Line movement sparkline for modal
+  const modalSparklineHtml = renderModalSparkline(g);
+  const lineMovementSection = modalSparklineHtml
+    ? `<div class="modal-section"><h3>Line Movement</h3>${{modalSparklineHtml}}</div>`
+    : '';
+
+  // Player Props section
+  let propsHtml = '';
+  const propsData = g.props || [];
+  if (propsData.length) {{
+    // Sort by book_spread ascending (tightest first), already pre-sorted
+    const SPREAD_WIDE_THRESHOLD = 0.08; // 8pp combined vig = unusually wide
+    const rows = propsData.map(p => {{
+      const isWide = p.book_spread > SPREAD_WIDE_THRESHOLD;
+      const spreadFmt = ((p.book_spread * 100).toFixed(1)) + '%';
+      const spreadClass = isWide ? 'spread-wide' : 'spread-tight';
+      const overLink = p.best_over_key
+        ? bookLink(p.best_over_book, (D.books_urls || {{}})[p.best_over_key] || '')
+        : esc(p.best_over_book);
+      const underLink = p.best_under_key
+        ? bookLink(p.best_under_book, (D.books_urls || {{}})[p.best_under_key] || '')
+        : esc(p.best_under_book);
+      return `<tr class="${{isWide ? 'wide-spread' : ''}}">
+        <td style="font-weight:600">${{esc(p.player_name)}}</td>
+        <td style="color:var(--text-2)">${{esc(p.market_label)}}</td>
+        <td>${{p.line}}</td>
+        <td>${{p.best_over_odds > 0 ? '+' : ''}}${{p.best_over_odds}} <span style="font-size:10px;color:var(--muted)">${{overLink}}</span></td>
+        <td>${{p.best_under_odds > 0 ? '+' : ''}}${{p.best_under_odds}} <span style="font-size:10px;color:var(--muted)">${{underLink}}</span></td>
+        <td class="spread-col ${{spreadClass}}">${{spreadFmt}}</td>
+      </tr>`;
+    }}).join('');
+
+    // Prop edge notes
+    const edgesData = g.prop_edges || [];
+    let edgeNotes = '';
+    if (edgesData.length) {{
+      const edgeItems = edgesData.slice(0, 3).map(e => {{
+        const dir = e.direction === 'over_value' ? 'Over value' : 'Under value';
+        return `<div class="props-edge-row"><strong>${{esc(e.sportsbook)}}</strong> &mdash; ${{esc(e.player_name)}} ${{esc(e.market_label)}}: line ${{e.outlier_line}} vs consensus ${{e.consensus_line}} &mdash; ${{dir}}</div>`;
+      }}).join('');
+      edgeNotes = `<div class="props-edge-note">Line discrepancies: ${{edgeItems}}</div>`;
+    }}
+
+    propsHtml = `<div class="modal-section">
+      <h3>Player Props <span style="font-weight:400;color:var(--muted);font-size:10px;text-transform:none;letter-spacing:0">(best odds across books &middot; sorted by spread)</span></h3>
+      <div style="overflow-x:auto">
+        <table class="props-table">
+          <thead><tr>
+            <th>Player</th><th>Market</th><th>Line</th>
+            <th>Best Over</th><th>Best Under</th><th>Book Spread</th>
+          </tr></thead>
+          <tbody>${{rows}}</tbody>
+        </table>
+      </div>
+      ${{edgeNotes}}
+    </div>`;
+  }}
+
   // Build modal
   const modal = document.getElementById('game-modal');
   document.getElementById('modal-body').innerHTML = `
@@ -1205,6 +1802,7 @@ function openGameModal(idx) {{
         </div>
       </div>
     </div>
+    ${{lineMovementSection}}
     ${{polyHtml}}
     <div class="modal-section">
       <h3>Best Bets</h3>
@@ -1216,6 +1814,7 @@ function openGameModal(idx) {{
     </div>
     ${{spreadHtml ? `<div class="modal-section"><h3>Puck Line</h3>${{spreadHtml}}</div>` : ''}}
     ${{totalHtml ? `<div class="modal-section"><h3>Over / Under</h3>${{totalHtml}}</div>` : ''}}
+    ${{propsHtml}}
     <div class="modal-section">
       <h3>Arb Check</h3>
       ${{arbHtml}}
@@ -1325,7 +1924,236 @@ async function refreshDashboard(demo) {{
   }}
 }}
 
+/* ---- HEDGE CALCULATOR ---- */
+let hedgeMode = 'lock_profit';
+
+function toggleHedge() {{
+  const body = document.getElementById('hedge-body');
+  const btn = document.getElementById('hedge-toggle');
+  const open = body.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}}
+
+function setHedgeMode(mode) {{
+  hedgeMode = mode;
+  document.getElementById('hm-lock').classList.toggle('active', mode === 'lock_profit');
+  document.getElementById('hm-min').classList.toggle('active', mode === 'minimize_loss');
+  calcHedge();
+}}
+
+function calcHedge() {{
+  const errEl = document.getElementById('hedge-error');
+  const resEl = document.getElementById('hedge-results');
+
+  const origOdds = parseFloat(document.getElementById('hc-orig-odds').value);
+  const origStake = parseFloat(document.getElementById('hc-orig-stake').value);
+  const hedgeOdds = parseFloat(document.getElementById('hc-hedge-odds').value);
+
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+
+  if (!origOdds || !origStake || !hedgeOdds) {{
+    resEl.classList.remove('visible');
+    return;
+  }}
+
+  if (origOdds <= 1.0 || hedgeOdds <= 1.0) {{
+    errEl.textContent = 'Decimal odds must be greater than 1.00.';
+    errEl.style.display = 'block';
+    resEl.classList.remove('visible');
+    return;
+  }}
+  if (origStake <= 0) {{
+    errEl.textContent = 'Original stake must be positive.';
+    errEl.style.display = 'block';
+    resEl.classList.remove('visible');
+    return;
+  }}
+
+  // --- Hedge calculation ---
+  const origPayout = origOdds * origStake;
+  // lock_profit and minimize_loss both use the same hedge sizing formula
+  const hedgeStake = Math.round((origPayout / hedgeOdds) * 100) / 100;
+  const totalOutlay = origStake + hedgeStake;
+  const profitOrigWins = Math.round((origPayout - origStake - hedgeStake) * 100) / 100;
+  const profitHedgeWins = Math.round((hedgeStake * hedgeOdds - totalOutlay) * 100) / 100;
+  const guaranteed = Math.min(profitOrigWins, profitHedgeWins);
+  const roi = totalOutlay > 0 ? Math.round((guaranteed / totalOutlay) * 10000) / 100 : 0;
+
+  // --- Cashout calculation ---
+  const currentImpliedProb = 1.0 / hedgeOdds;
+  const fairValue = Math.round(currentImpliedProb * origPayout * 100) / 100;
+  const cashoutProfit = Math.round((fairValue - origStake) * 100) / 100;
+  const evIfHold = Math.round(
+    (currentImpliedProb * (origPayout - origStake) - (1 - currentImpliedProb) * origStake) * 100
+  ) / 100;
+
+  // --- Render ---
+  function fmtMoney(v) {{
+    const s = Math.abs(v).toFixed(2);
+    return (v < 0 ? '-$' : '$') + s;
+  }}
+  function colorClass(v) {{
+    return v > 0 ? 'green' : v < 0 ? 'red' : '';
+  }}
+
+  document.getElementById('hs-stake').textContent = '$' + hedgeStake.toFixed(2);
+  const owEl = document.getElementById('hs-orig-win');
+  owEl.textContent = fmtMoney(profitOrigWins);
+  owEl.className = 'hs-value ' + colorClass(profitOrigWins);
+  const hwEl = document.getElementById('hs-hedge-win');
+  hwEl.textContent = fmtMoney(profitHedgeWins);
+  hwEl.className = 'hs-value ' + colorClass(profitHedgeWins);
+  const gpEl = document.getElementById('hs-guaranteed');
+  gpEl.textContent = fmtMoney(guaranteed);
+  gpEl.className = 'hs-value ' + colorClass(guaranteed);
+  const roiEl = document.getElementById('hs-roi');
+  roiEl.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
+  roiEl.className = 'hs-value ' + colorClass(roi);
+
+  document.getElementById('hc-fair').textContent = '$' + fairValue.toFixed(2);
+  const cpEl = document.getElementById('hc-profit');
+  cpEl.textContent = fmtMoney(cashoutProfit);
+  cpEl.style.color = cashoutProfit >= 0 ? 'var(--green)' : 'var(--red)';
+  const evEl = document.getElementById('hc-ev');
+  evEl.textContent = fmtMoney(evIfHold);
+  evEl.style.color = evIfHold >= 0 ? 'var(--green)' : 'var(--red)';
+
+  resEl.classList.add('visible');
+}}
+
 init();
+
+/* ---- PERFORMANCE TRACKER ---- */
+(function() {{
+  function fmt$(v) {{ return (v >= 0 ? '+' : '') + '$' + Math.abs(v).toFixed(2); }}
+  function roiColor(r) {{ return r >= 0 ? 'var(--green)' : 'var(--red)'; }}
+
+  function renderPerf(d) {{
+    // Show content, hide placeholder
+    document.getElementById('perf-placeholder').style.display = 'none';
+    document.getElementById('perf-content').style.display = '';
+
+    // KPI strip
+    const winRatePct = (d.win_rate * 100).toFixed(1);
+    const roi = d.roi_pct;
+    const netPl = d.net_profit;
+    const plSign = netPl >= 0 ? '+' : '';
+    document.getElementById('perf-kpis').innerHTML = `
+      <div class="kpi ${{d.win_rate >= 0.5 ? 'green' : ''}}">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value">${{winRatePct}}%</div>
+        <div class="kpi-sub">${{d.wins}}W / ${{d.losses}}L</div>
+      </div>
+      <div class="kpi ${{roi >= 0 ? 'green' : ''}}">
+        <div class="kpi-label">ROI</div>
+        <div class="kpi-value" style="color:${{roiColor(roi)}}">${{roi >= 0 ? '+' : ''}}${{roi.toFixed(1)}}%</div>
+        <div class="kpi-sub">on ${{d.settled_bets}} settled</div>
+      </div>
+      <div class="kpi ${{netPl >= 0 ? 'green' : ''}}">
+        <div class="kpi-label">Net P&amp;L</div>
+        <div class="kpi-value" style="color:${{roiColor(netPl)}}">${{plSign}}$${{Math.abs(netPl).toFixed(2)}}</div>
+        <div class="kpi-sub">staked $${{d.total_staked.toFixed(2)}}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Total Bets</div>
+        <div class="kpi-value">${{d.total_bets}}</div>
+        <div class="kpi-sub">${{d.pending_bets}} pending</div>
+      </div>
+    `;
+
+    // Bar chart
+    const months = d.by_month || [];
+    if (months.length) {{
+      const maxAbs = Math.max(1, ...months.map(m => Math.abs(m.profit)));
+      const chartHeight = 80; // px available for bars
+      const chart = document.getElementById('perf-bar-chart');
+      chart.innerHTML = months.map(m => {{
+        const h = Math.max(3, (Math.abs(m.profit) / maxAbs) * chartHeight);
+        const pos = m.profit >= 0;
+        return `<div class="perf-bar-col">
+          <div class="perf-bar-value" style="color:${{roiColor(m.profit)}}">${{fmt$(m.profit)}}</div>
+          <div class="perf-bar ${{pos ? 'positive' : 'negative'}}" style="height:${{h}}px" title="${{m.month}}: ${{fmt$(m.profit)}} (${{m.roi}}% ROI)"></div>
+          <div class="perf-bar-label">${{m.month.slice(5)}}</div>
+        </div>`;
+      }}).join('');
+    }} else {{
+      document.getElementById('perf-chart-wrap').style.display = 'none';
+    }}
+
+    // By-book table
+    const books = d.by_book || [];
+    const bookBody = document.getElementById('perf-book-body');
+    if (books.length) {{
+      bookBody.innerHTML = books.map(b => {{
+        const plCls = b.profit >= 0 ? 'pos' : 'neg';
+        return `<tr>
+          <td style="font-weight:600">${{esc(b.book)}}</td>
+          <td>${{b.bets}}</td>
+          <td class="perf-profit ${{plCls}}">${{fmt$(b.profit)}}</td>
+          <td style="color:${{roiColor(b.roi)}};font-weight:700">${{b.roi >= 0 ? '+' : ''}}${{b.roi.toFixed(1)}}%</td>
+        </tr>`;
+      }}).join('');
+    }} else {{
+      bookBody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);padding:12px">No data</td></tr>';
+    }}
+
+    // Recent bets
+    const recent = d.recent_bets || [];
+    const list = document.getElementById('perf-recent-list');
+    if (recent.length) {{
+      list.innerHTML = recent.map(b => {{
+        const isWin = b.result === 'win';
+        const resultLabel = isWin ? 'W' : 'L';
+        const plCls = b.profit >= 0 ? 'pos' : 'neg';
+        return `<li class="perf-recent-item">
+          <span class="perf-result-badge ${{isWin ? 'win' : 'loss'}}">${{resultLabel}}</span>
+          <span>
+            <strong>${{esc(b.side)}}</strong>
+            <span style="color:var(--muted);font-size:11px"> &mdash; ${{esc(b.game)}}</span>
+          </span>
+          <span class="perf-recent-meta">
+            <span style="color:var(--text-2)">${{b.odds.toFixed(2)}}</span>
+            &nbsp;&middot;&nbsp;$${{b.stake.toFixed(2)}}
+            &nbsp;&middot;&nbsp;<span class="perf-profit ${{plCls}}">${{fmt$(b.profit)}}</span>
+          </span>
+        </li>`;
+      }}).join('');
+    }} else {{
+      list.innerHTML = '<li class="perf-recent-item" style="color:var(--muted)">No settled bets yet</li>';
+    }}
+  }}
+
+  function showPerfError(msg) {{
+    const ph = document.getElementById('perf-placeholder');
+    ph.style.display = '';
+    ph.textContent = msg || 'No tracking data yet. Bets will appear here once recorded.';
+    document.getElementById('perf-content').style.display = 'none';
+  }}
+
+  async function loadPerf() {{
+    try {{
+      const res = await fetch('/api/performance');
+      if (!res.ok) {{ showPerfError('Performance data unavailable.'); return; }}
+      const d = await res.json();
+      if (d.settled_bets === 0 && !d._demo) {{
+        showPerfError('No tracking data yet. Bets will appear here once recorded.');
+        return;
+      }}
+      renderPerf(d);
+    }} catch(e) {{
+      showPerfError('No tracking data yet. Bets will appear here once recorded.');
+    }}
+  }}
+
+  // Lazy-load after main render completes
+  if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', loadPerf);
+  }} else {{
+    loadPerf();
+  }}
+}})();
 </script>
 </body>
 </html>"""

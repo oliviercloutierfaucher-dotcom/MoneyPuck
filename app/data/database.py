@@ -15,6 +15,22 @@ DB_PATH = Path(os.getenv("MONEYPUCK_DB_PATH", str(Path.home() / ".moneypuck" / "
 _SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
 
+CREATE TABLE IF NOT EXISTS closing_odds (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id     TEXT    NOT NULL,
+    home_team   TEXT    NOT NULL,
+    away_team   TEXT    NOT NULL,
+    sportsbook  TEXT    NOT NULL,
+    market      TEXT    DEFAULT 'ML',
+    home_odds   INTEGER,
+    away_odds   INTEGER,
+    captured_at TEXT    NOT NULL,
+    UNIQUE(game_id, sportsbook, market)
+);
+
+CREATE INDEX IF NOT EXISTS idx_closing_odds_game
+    ON closing_odds (game_id);
+
 CREATE TABLE IF NOT EXISTS predictions (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at          TEXT    DEFAULT (datetime('now')),
@@ -258,6 +274,97 @@ class TrackerDatabase:
             params,
         )
         return [self._row_to_dict(r) for r in cur.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Closing odds
+    # ------------------------------------------------------------------
+
+    def save_closing_odds(
+        self,
+        game_id: str,
+        home_team: str,
+        away_team: str,
+        sportsbook: str,
+        home_odds: int | None,
+        away_odds: int | None,
+        market: str = "ML",
+    ) -> None:
+        """Persist closing-line odds for a game.
+
+        Uses INSERT OR REPLACE so repeated captures (e.g. multiple settlement
+        passes) always keep the most recent snapshot.
+        """
+        self._conn.execute(
+            """
+            INSERT OR REPLACE INTO closing_odds
+                (game_id, home_team, away_team, sportsbook, market,
+                 home_odds, away_odds, captured_at)
+            VALUES
+                (:game_id, :home_team, :away_team, :sportsbook, :market,
+                 :home_odds, :away_odds, datetime('now'))
+            """,
+            {
+                "game_id": game_id,
+                "home_team": home_team,
+                "away_team": away_team,
+                "sportsbook": sportsbook,
+                "market": market,
+                "home_odds": home_odds,
+                "away_odds": away_odds,
+            },
+        )
+        self._conn.commit()
+
+    def get_closing_odds(
+        self, game_id: str, market: str = "ML"
+    ) -> list[dict[str, Any]]:
+        """Return all bookmakers' closing odds for a given game and market."""
+        cur = self._conn.execute(
+            "SELECT * FROM closing_odds WHERE game_id = :game_id AND market = :market",
+            {"game_id": game_id, "market": market},
+        )
+        return [self._row_to_dict(r) for r in cur.fetchall()]
+
+    def get_clv_summary(self) -> dict[str, Any]:
+        """Aggregate CLV stats across all settled predictions that have closing odds.
+
+        A prediction must have both ``american_odds`` (placement odds) and
+        ``closing_odds`` (the column on the predictions table) to be included.
+
+        Returns a dict with:
+        - ``avg_clv_cents``: mean CLV in probability-point cents
+        - ``pct_beating_close``: fraction of bets that beat the closing line
+        - ``total_bets``: number of bets with CLV data
+        - ``clv_by_book``: per-sportsbook breakdown
+        """
+        from app.core.clv import aggregate_clv
+
+        cur = self._conn.execute(
+            """
+            SELECT sportsbook, american_odds, closing_odds
+            FROM predictions
+            WHERE american_odds IS NOT NULL
+              AND closing_odds IS NOT NULL
+              AND outcome IS NOT NULL
+            """
+        )
+        rows = [self._row_to_dict(r) for r in cur.fetchall()]
+        if not rows:
+            return {
+                "avg_clv_cents": 0.0,
+                "pct_beating_close": 0.0,
+                "total_bets": 0,
+                "clv_by_book": {},
+            }
+        bets = [
+            {
+                "sportsbook": r["sportsbook"],
+                "placement_odds": r["american_odds"],
+                "closing_odds": r["closing_odds"],
+            }
+            for r in rows
+        ]
+        return aggregate_clv(bets)
 
     def close(self) -> None:
         """Close the underlying database connection."""

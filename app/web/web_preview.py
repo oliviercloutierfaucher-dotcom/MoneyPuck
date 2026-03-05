@@ -9,6 +9,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from app.data.data_sources import get_books_for_region, QUEBEC_BOOKS, team_code, TEAM_NAME_TO_CODE
+from app.data.odds_history import (
+    build_history_response,
+    generate_demo_sparkline,
+    make_game_id,
+    record_snapshots_from_dashboard,
+)
+from app.data.player_props import (
+    build_demo_props,
+    compare_props,
+    fetch_player_props,
+    find_prop_edges,
+)
 from app.data.polymarket import fetch_nhl_events, fetch_nhl_series_id, match_polymarket_to_games
 from app.logging_config import get_logger, setup_logging
 from app.math.math_utils import (
@@ -226,6 +238,11 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
                         "stake_fraction": round(stake / bankroll, 4),
                     })
 
+        # Demo player props
+        demo_prop_lines = build_demo_props(home, away)
+        demo_props = compare_props(demo_prop_lines)
+        demo_prop_edges = find_prop_edges(demo_prop_lines)
+
         games.append({
             "home": home,
             "away": away,
@@ -233,6 +250,8 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
             "home_prob": round(home_prob, 4),
             "away_prob": round(away_prob, 4),
             "books": game_books,
+            "props": demo_props,
+            "prop_edges": demo_prop_edges,
         })
 
     # De-duplicate value bets: keep best per game+side
@@ -265,6 +284,14 @@ def _build_demo_dashboard(params: dict[str, list[str]]) -> dict:
         # Margin: 1/3.05 + 1/2.10 = 0.328 + 0.476 = 0.804 < 1 → arb
 
     arb_opportunities = _detect_arbs(games)
+
+    # Attach demo sparkline history to each game (so UI always looks populated)
+    for g in games:
+        gid = make_game_id(g["home"], g["away"], g["commence"])
+        g["game_id"] = gid
+        g["sparkline"] = generate_demo_sparkline(
+            gid, g["home"], g["away"], g["home_prob"]
+        )
 
     total_stake = sum(b["recommended_stake"] for b in value_bets)
     avg_edge = sum(b["edge_probability_points"] for b in value_bets) / len(value_bets) if value_bets else 0
@@ -549,6 +576,25 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
 
             game_books.append(book_entry)
 
+        gid = make_game_id(home, away, commence)
+
+        # Fetch player props for this event (separate API call per event)
+        event_id = event.get("id", "")
+        game_props: list[dict] = []
+        game_prop_edges: list[dict] = []
+        if event_id and config.odds_api_key:
+            try:
+                prop_lines = fetch_player_props(
+                    config.odds_api_key,
+                    event_id,
+                    regions=config.region,
+                    bookmakers=config.bookmakers or "",
+                )
+                game_props = compare_props(prop_lines)
+                game_prop_edges = find_prop_edges(prop_lines)
+            except Exception as exc:
+                log.debug("Props fetch skipped for %s @ %s: %s", away, home, exc)
+
         games.append({
             "home": home,
             "away": away,
@@ -556,6 +602,9 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             "home_prob": round(hp, 4),
             "away_prob": round(ap, 4),
             "books": game_books,
+            "game_id": gid,
+            "props": game_props,
+            "prop_edges": game_prop_edges,
         })
 
     # Rebuild value bets using demo strength if needed
@@ -579,6 +628,9 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
         log.warning("Polymarket fetch failed — continuing without it")
 
     arb_opportunities = _detect_arbs(games)
+
+    # Record odds snapshots for line-movement tracking
+    record_snapshots_from_dashboard(games)
 
     all_book_names = sorted({b["name"] for g in games for b in g.get("books", [])})
     total_stake = sum(b["recommended_stake"] for b in value_bets)
@@ -652,6 +704,219 @@ def _extract_value_bets_from_games(
     return sorted(best.values(), key=lambda x: x["expected_value_per_dollar"], reverse=True)
 
 
+def _build_performance_data() -> dict:
+    """Query the SQLite database and return performance metrics.
+
+    Falls back to deterministic demo data when no database exists or it
+    has fewer than 2 settled predictions, so the UI always has something
+    meaningful to display.
+    """
+    try:
+        from app.data.database import TrackerDatabase, DB_PATH
+        if not DB_PATH.exists():
+            return _demo_performance_data()
+        with TrackerDatabase() as db:
+            all_preds = db.get_predictions()
+        if not all_preds:
+            return _demo_performance_data()
+        return _aggregate_performance(all_preds)
+    except Exception:
+        log.warning("Performance data unavailable — returning demo data")
+        return _demo_performance_data()
+
+
+def _aggregate_performance(predictions: list[dict]) -> dict:
+    """Compute performance KPIs from a list of prediction dicts."""
+    total_bets = len(predictions)
+    settled = [p for p in predictions if p.get("outcome") in {"win", "loss", "push", "void"}]
+    pending = [p for p in predictions if p.get("outcome") is None]
+    wins = [p for p in settled if p.get("outcome") == "win"]
+    losses = [p for p in settled if p.get("outcome") == "loss"]
+
+    settled_count = len(settled)
+    win_count = len(wins)
+    loss_count = len(losses)
+    win_rate = win_count / settled_count if settled_count > 0 else 0.0
+
+    total_staked = sum(p.get("recommended_stake") or 0.0 for p in settled)
+    total_returned = sum(
+        (p.get("recommended_stake") or 0.0) + (p.get("profit_loss") or 0.0)
+        for p in settled
+    )
+    net_profit = total_returned - total_staked
+    roi_pct = (net_profit / total_staked * 100) if total_staked > 0 else 0.0
+
+    # --- Monthly aggregation ---
+    from collections import defaultdict
+    month_buckets: dict[str, dict] = defaultdict(lambda: {"bets": 0, "staked": 0.0, "profit": 0.0})
+    for p in settled:
+        # settled_at or created_at
+        ts = p.get("settled_at") or p.get("created_at") or ""
+        month = ts[:7] if len(ts) >= 7 else "unknown"
+        month_buckets[month]["bets"] += 1
+        stake = p.get("recommended_stake") or 0.0
+        pl = p.get("profit_loss") or 0.0
+        month_buckets[month]["staked"] += stake
+        month_buckets[month]["profit"] += pl
+
+    by_month = []
+    for month in sorted(month_buckets.keys()):
+        m = month_buckets[month]
+        roi = (m["profit"] / m["staked"] * 100) if m["staked"] > 0 else 0.0
+        by_month.append({
+            "month": month,
+            "bets": m["bets"],
+            "profit": round(m["profit"], 2),
+            "roi": round(roi, 1),
+        })
+
+    # --- By-book aggregation ---
+    book_buckets: dict[str, dict] = defaultdict(lambda: {"bets": 0, "staked": 0.0, "profit": 0.0})
+    for p in settled:
+        book = p.get("sportsbook") or "Unknown"
+        book_buckets[book]["bets"] += 1
+        book_buckets[book]["staked"] += p.get("recommended_stake") or 0.0
+        book_buckets[book]["profit"] += p.get("profit_loss") or 0.0
+
+    by_book = []
+    for book, bk in book_buckets.items():
+        roi = (bk["profit"] / bk["staked"] * 100) if bk["staked"] > 0 else 0.0
+        by_book.append({
+            "book": book,
+            "bets": bk["bets"],
+            "profit": round(bk["profit"], 2),
+            "roi": round(roi, 1),
+        })
+    by_book.sort(key=lambda x: x["roi"], reverse=True)
+
+    # --- Recent 10 settled bets ---
+    recent_settled = sorted(
+        settled,
+        key=lambda p: p.get("settled_at") or p.get("created_at") or "",
+        reverse=True,
+    )[:10]
+    recent_bets = []
+    for p in recent_settled:
+        commence = p.get("commence_time") or ""
+        date_str = commence[:10] if len(commence) >= 10 else ""
+        game = f"{p.get('away_team', '?')} @ {p.get('home_team', '?')}"
+        stake = p.get("recommended_stake") or 0.0
+        pl = p.get("profit_loss") or 0.0
+        recent_bets.append({
+            "date": date_str,
+            "game": game,
+            "side": p.get("side", ""),
+            "odds": round(p.get("decimal_odds") or 0.0, 2),
+            "stake": round(stake, 2),
+            "result": p.get("outcome", ""),
+            "profit": round(pl, 2),
+        })
+
+    return {
+        "total_bets": total_bets,
+        "settled_bets": settled_count,
+        "pending_bets": len(pending),
+        "wins": win_count,
+        "losses": loss_count,
+        "win_rate": round(win_rate, 4),
+        "total_staked": round(total_staked, 2),
+        "total_returned": round(total_returned, 2),
+        "net_profit": round(net_profit, 2),
+        "roi_pct": round(roi_pct, 2),
+        "by_month": by_month,
+        "by_book": by_book,
+        "recent_bets": recent_bets,
+    }
+
+
+def _demo_performance_data() -> dict:
+    """Return deterministic demo performance data when no real DB exists."""
+    import random as _rnd
+    rng = _rnd.Random(42)
+
+    months = [
+        "2024-10", "2024-11", "2024-12",
+        "2025-01", "2025-02", "2025-03",
+    ]
+    teams = [
+        ("TOR", "MTL"), ("EDM", "VAN"), ("FLA", "NYR"), ("CAR", "BOS"),
+        ("WPG", "CHI"), ("DAL", "CBJ"), ("COL", "SJS"), ("BUF", "PIT"),
+        ("NJD", "NYI"), ("TBL", "DET"), ("MIN", "STL"), ("PHI", "WSH"),
+    ]
+    books = ["Bet365", "BetMGM", "DraftKings", "PointsBet", "FanDuel"]
+
+    by_month = []
+    all_bets = []
+    for month in months:
+        n_bets = rng.randint(18, 35)
+        staked = n_bets * rng.uniform(22, 45)
+        roi = rng.uniform(-8, 22)
+        profit = staked * roi / 100
+        by_month.append({
+            "month": month,
+            "bets": n_bets,
+            "profit": round(profit, 2),
+            "roi": round(roi, 1),
+        })
+        for _ in range(n_bets):
+            home, away = rng.choice(teams)
+            book = rng.choice(books)
+            outcome = "win" if rng.random() < 0.57 else "loss"
+            stake = round(rng.uniform(20, 50), 2)
+            dec_odds = round(rng.uniform(1.65, 2.40), 2)
+            pl = round(stake * (dec_odds - 1), 2) if outcome == "win" else round(-stake, 2)
+            all_bets.append({
+                "date": f"{month}-{rng.randint(1, 28):02d}",
+                "game": f"{away} @ {home}",
+                "side": home if rng.random() > 0.45 else away,
+                "odds": dec_odds,
+                "stake": stake,
+                "result": outcome,
+                "profit": pl,
+                "book": book,
+            })
+
+    total_bets = len(all_bets)
+    wins = sum(1 for b in all_bets if b["result"] == "win")
+    losses = total_bets - wins
+    total_staked = round(sum(b["stake"] for b in all_bets), 2)
+    net_profit = round(sum(b["profit"] for b in all_bets), 2)
+    total_returned = round(total_staked + net_profit, 2)
+    win_rate = round(wins / total_bets, 4) if total_bets else 0.0
+    roi_pct = round(net_profit / total_staked * 100, 2) if total_staked else 0.0
+
+    from collections import defaultdict
+    book_buckets: dict[str, dict] = defaultdict(lambda: {"bets": 0, "staked": 0.0, "profit": 0.0})
+    for b in all_bets:
+        book_buckets[b["book"]]["bets"] += 1
+        book_buckets[b["book"]]["staked"] += b["stake"]
+        book_buckets[b["book"]]["profit"] += b["profit"]
+    by_book = []
+    for bk_name, bk in book_buckets.items():
+        roi = (bk["profit"] / bk["staked"] * 100) if bk["staked"] > 0 else 0.0
+        by_book.append({"book": bk_name, "bets": bk["bets"], "profit": round(bk["profit"], 2), "roi": round(roi, 1)})
+    by_book.sort(key=lambda x: x["roi"], reverse=True)
+
+    recent_bets = [{k: v for k, v in b.items() if k != "book"} for b in reversed(all_bets[-10:])]
+
+    return {
+        "total_bets": total_bets,
+        "settled_bets": total_bets,
+        "pending_bets": 0,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": win_rate,
+        "total_staked": total_staked,
+        "total_returned": total_returned,
+        "net_profit": net_profit,
+        "roi_pct": roi_pct,
+        "by_month": by_month,
+        "by_book": by_book,
+        "recent_bets": recent_bets,
+        "_demo": True,
+    }
+
+
 class PreviewHandler(BaseHTTPRequestHandler):
     def _send_security_headers(self) -> None:
         """Add security headers to every response."""
@@ -697,6 +962,15 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            if parsed.path == "/api/performance":
+                body = json.dumps(_build_performance_data(), indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self._send_security_headers()
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if parsed.path == "/api/opportunities":
                 if use_demo:
                     data = _build_demo_dashboard(params)
@@ -706,6 +980,50 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     from app.core.service import run_tracker
                     recommendations = run_tracker(config)
                     body = json.dumps(to_serializable(recommendations), indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self._send_security_headers()
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if parsed.path == "/api/odds-history":
+                game_id = params.get("game_id", [""])[0]
+                if not game_id:
+                    body = json.dumps({"error": "game_id parameter required"}).encode("utf-8")
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self._send_security_headers()
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+
+                if use_demo:
+                    # In demo mode, generate synthetic sparkline data
+                    # Parse game_id format: "{home}-{away}-{commence}"
+                    parts = game_id.split("-", 2)
+                    home_t = parts[0] if len(parts) > 0 else "HOME"
+                    away_t = parts[1] if len(parts) > 1 else "AWAY"
+                    import random as _random
+                    rng = _random.Random(hash(game_id))
+                    current_prob = 0.45 + rng.random() * 0.1
+                    snapshots = generate_demo_sparkline(game_id, home_t, away_t, current_prob)
+                    opening = snapshots[0] if snapshots else None
+                    current = snapshots[-1] if snapshots else None
+                    history_data = {
+                        "game_id": game_id,
+                        "snapshots": snapshots,
+                        "opening": {"home_implied": opening["home_implied"], "away_implied": opening["away_implied"]} if opening else None,
+                        "current": {"home_implied": current["home_implied"], "away_implied": current["away_implied"]} if current else None,
+                        "movement": {
+                            "home_shift": round((current["home_implied"] - opening["home_implied"]), 4) if opening and current else 0,
+                            "away_shift": round((current["away_implied"] - opening["away_implied"]), 4) if opening and current else 0,
+                        } if opening and current else None,
+                    }
+                else:
+                    history_data = build_history_response(game_id)
+
+                body = json.dumps(history_data, indent=2).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self._send_security_headers()

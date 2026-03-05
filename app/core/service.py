@@ -396,6 +396,63 @@ def run_tracker(config: TrackerConfig) -> list[dict[str, object]]:
     return recommendations
 
 
+def _fetch_closing_odds_for_games(
+    unsettled: list[dict],
+) -> dict[tuple[str, str], dict]:
+    """Best-effort fetch of current odds for unsettled games to use as closing lines.
+
+    Queries The Odds API for h2h (moneyline) odds, then returns a lookup keyed
+    by (home_team, away_team) → {sportsbook: {home_odds, away_odds}, ...}.
+
+    Failures are swallowed — CLV capture is non-critical.
+    """
+    import os
+    from app.data.data_sources import fetch_odds
+
+    api_key = os.getenv("ODDS_API_KEY", "")
+    if not api_key:
+        log.debug("ODDS_API_KEY not set — skipping closing odds capture")
+        return {}
+
+    try:
+        # Use a broad Canadian region to get as many books as possible
+        events = fetch_odds(api_key, region="ca", bookmakers=None)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Failed to fetch closing odds: %s", exc)
+        return {}
+
+    # Build lookup: (home_team, away_team) → list of {sportsbook, home_odds, away_odds}
+    lookup: dict[tuple[str, str], list[dict]] = {}
+    for event in events:
+        home = event.get("home_team", "")
+        away = event.get("away_team", "")
+        if not home or not away:
+            continue
+        books = []
+        for bookmaker in event.get("bookmakers", []):
+            book_name = bookmaker.get("key", bookmaker.get("title", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "h2h":
+                    continue
+                outcomes = {o["name"]: o["price"] for o in market.get("outcomes", [])}
+                home_o = outcomes.get(home)
+                away_o = outcomes.get(away)
+                if home_o is not None and away_o is not None:
+                    books.append({
+                        "sportsbook": book_name,
+                        "home_odds": int(home_o),
+                        "away_odds": int(away_o),
+                    })
+        if books:
+            lookup[(home, away)] = books
+
+    log.info(
+        "Closing odds fetched: %d events with ML odds",
+        sum(1 for v in lookup.values() if v),
+    )
+    return lookup
+
+
 def settle_outstanding() -> dict[str, object]:
     """Auto-settle unsettled predictions by fetching NHL game results.
 
@@ -403,8 +460,12 @@ def settle_outstanding() -> dict[str, object]:
     by date, home_team, and away_team.  Computes P&L based on the side
     bet and the final score.
 
-    Returns a summary dict with settled count, total P&L, and any errors.
+    Also captures closing-line odds via The Odds API (best-effort) and
+    calculates CLV for each settled prediction.
+
+    Returns a summary dict with settled count, total P&L, CLV stats, and any errors.
     """
+    from app.core.clv import calculate_clv
     from app.data.database import TrackerDatabase
     from app.data.nhl_api import fetch_schedule, fetch_scores_for_date
 
@@ -416,7 +477,30 @@ def settle_outstanding() -> dict[str, object]:
         unsettled = db.get_unsettled()
         if not unsettled:
             log.info("No unsettled predictions to process")
-            return {"settled": 0, "total_pnl": 0.0, "errors": []}
+            return {"settled": 0, "total_pnl": 0.0, "clv": {}, "errors": []}
+
+        # Fetch closing odds BEFORE settling (while game may still be listed)
+        closing_odds_lookup = _fetch_closing_odds_for_games(unsettled)
+
+        # Persist closing odds for all games we found (best-effort, outside main tx)
+        for pred in unsettled:
+            home = pred["home_team"]
+            away = pred["away_team"]
+            game_id = pred.get("game_id", "")
+            book_entries = closing_odds_lookup.get((home, away), [])
+            for entry in book_entries:
+                try:
+                    db.save_closing_odds(
+                        game_id=game_id,
+                        home_team=home,
+                        away_team=away,
+                        sportsbook=entry["sportsbook"],
+                        home_odds=entry["home_odds"],
+                        away_odds=entry["away_odds"],
+                        market="ML",
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("Could not save closing odds for %s @ %s / %s: %s", away, home, entry["sportsbook"], exc)
 
         # Group unsettled by date to minimize API calls
         by_date: dict[str, list[dict]] = {}
@@ -462,13 +546,39 @@ def settle_outstanding() -> dict[str, object]:
                 for pred in preds:
                     home = pred["home_team"]
                     away = pred["away_team"]
+                    side = pred["side"]
+
+                    # Resolve closing odds for this prediction's side + book
+                    closing_line: int | None = None
+                    book_entries = closing_odds_lookup.get((home, away), [])
+                    # Prefer matching the same sportsbook, fall back to any book
+                    pred_book = pred.get("sportsbook", "")
+                    matching = [e for e in book_entries if e["sportsbook"] == pred_book]
+                    candidate_books = matching or book_entries
+                    if candidate_books:
+                        entry = candidate_books[0]
+                        closing_line = (
+                            entry["home_odds"] if side == home else entry["away_odds"]
+                        )
+
+                    # Calculate CLV if we have both placement and closing odds
+                    clv_cents: float | None = None
+                    if closing_line is not None and pred.get("american_odds"):
+                        try:
+                            clv_result = calculate_clv(
+                                placement_odds=int(pred["american_odds"]),
+                                closing_odds=closing_line,
+                            )
+                            clv_cents = clv_result["clv_cents"]
+                        except Exception as exc:  # noqa: BLE001
+                            log.debug("CLV calculation failed for pred #%d: %s", pred["id"], exc)
 
                     # Check for postponement first
                     if (home, away) in ppd_games:
                         db.settle(
                             prediction_id=pred["id"],
                             outcome="void",
-                            closing_odds=None,
+                            closing_odds=closing_line,
                             profit_loss=0.0,
                             auto_commit=False,
                         )
@@ -481,7 +591,6 @@ def settle_outstanding() -> dict[str, object]:
                         continue
 
                     # Determine outcome
-                    side = pred["side"]
                     home_score = score["home_score"]
                     away_score = score["away_score"]
                     winning_team = home if home_score > away_score else away
@@ -501,15 +610,16 @@ def settle_outstanding() -> dict[str, object]:
                     db.settle(
                         prediction_id=pred["id"],
                         outcome=outcome,
-                        closing_odds=None,
+                        closing_odds=closing_line,
                         profit_loss=pnl,
                         auto_commit=False,
                     )
                     settled_count += 1
                     total_pnl += pnl
+                    clv_str = f" CLV: {clv_cents:+.2f}¢" if clv_cents is not None else ""
                     log.info(
-                        "Settled #%d: %s %s @ %s → %s (P&L: %+.2f)",
-                        pred["id"], side, away, home, outcome, pnl,
+                        "Settled #%d: %s %s @ %s → %s (P&L: %+.2f%s)",
+                        pred["id"], side, away, home, outcome, pnl, clv_str,
                     )
 
             db._conn.commit()
@@ -518,9 +628,17 @@ def settle_outstanding() -> dict[str, object]:
             log.error("Settlement transaction failed, rolled back: %s", exc)
             errors.append(f"Transaction failed: {exc}")
 
+        # Return CLV summary after settlement
+        clv_summary: dict = {}
+        try:
+            clv_summary = db.get_clv_summary()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("CLV summary failed: %s", exc)
+
     return {
         "settled": settled_count,
         "total_pnl": round(total_pnl, 2),
+        "clv": clv_summary,
         "errors": errors,
     }
 
