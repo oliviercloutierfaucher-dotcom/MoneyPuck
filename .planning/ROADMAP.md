@@ -46,6 +46,11 @@ Plans:
 
 **Requirements:** R8.1, R8.2, R8.3
 
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Fix failing test, add CI workflow, enable Railway deploy gating
+
 **Approach:**
 - Add `.github/workflows/ci.yml` — run pytest on push and PR
 - Configure Railway to deploy only after CI passes
