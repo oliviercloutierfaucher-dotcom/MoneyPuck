@@ -108,6 +108,67 @@ def test_settle_prediction():
         assert row["settled_at"] is not None
 
 
+def test_railway_volume_path(monkeypatch):
+    """When RAILWAY_VOLUME_MOUNT_PATH is set, DB resolves to /data/tracker.db."""
+    from app.data.database import _resolve_db_path
+
+    monkeypatch.setenv("RAILWAY_VOLUME_MOUNT_PATH", "/data")
+    monkeypatch.delenv("MONEYPUCK_DB_PATH", raising=False)
+    result = _resolve_db_path()
+    assert result == Path("/data/tracker.db")
+
+
+def test_explicit_db_path(monkeypatch):
+    """When MONEYPUCK_DB_PATH is set (no Railway var), use that path."""
+    from app.data.database import _resolve_db_path
+
+    monkeypatch.delenv("RAILWAY_VOLUME_MOUNT_PATH", raising=False)
+    monkeypatch.setenv("MONEYPUCK_DB_PATH", "/custom/my.db")
+    result = _resolve_db_path()
+    assert result == Path("/custom/my.db")
+
+
+def test_default_db_path(monkeypatch):
+    """When no env vars are set, fall back to ~/.moneypuck/tracker.db."""
+    from app.data.database import _resolve_db_path
+
+    monkeypatch.delenv("RAILWAY_VOLUME_MOUNT_PATH", raising=False)
+    monkeypatch.delenv("MONEYPUCK_DB_PATH", raising=False)
+    result = _resolve_db_path()
+    assert result == Path.home() / ".moneypuck" / "tracker.db"
+
+
+def test_railway_takes_priority(monkeypatch):
+    """When both env vars are set, Railway volume wins."""
+    from app.data.database import _resolve_db_path
+
+    monkeypatch.setenv("RAILWAY_VOLUME_MOUNT_PATH", "/data")
+    monkeypatch.setenv("MONEYPUCK_DB_PATH", "/custom/my.db")
+    result = _resolve_db_path()
+    assert result == Path("/data/tracker.db")
+
+
+def test_data_survives_reopen():
+    """Write a prediction, close DB, reopen at same path, data persists."""
+    tmp = tempfile.mkdtemp()
+    db_path = Path(tmp) / "persist_test.db"
+
+    # Write data with first connection
+    db1 = TrackerDatabase(db_path=db_path)
+    rec = _make_recommendation(stake=42.0, side="MTL", sportsbook="FanDuel")
+    pred_id = db1.save_prediction(rec, profile="test")
+    db1.close()
+
+    # Reopen with new connection (simulates redeploy)
+    db2 = TrackerDatabase(db_path=db_path)
+    rows = db2.get_predictions(profile="test")
+    db2.close()
+
+    assert len(rows) == 1
+    assert rows[0]["id"] == pred_id
+    assert abs(rows[0]["recommended_stake"] - 42.0) < 1e-6
+
+
 def test_get_unsettled():
     """Save two predictions, settle one, confirm only one unsettled remains."""
     with _tmp_db() as db:

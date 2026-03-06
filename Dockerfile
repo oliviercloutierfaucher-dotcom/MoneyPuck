@@ -13,6 +13,7 @@ COPY . /app
 
 RUN adduser --disabled-password --gecos '' appuser
 RUN mkdir -p /home/appuser/.moneypuck && chown -R appuser:appuser /home/appuser/.moneypuck
+RUN mkdir -p /data && chown -R appuser:appuser /data
 USER appuser
 
 EXPOSE 8080

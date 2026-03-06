@@ -10,7 +10,27 @@ from app.logging_config import get_logger
 
 log = get_logger("database")
 
-DB_PATH = Path(os.getenv("MONEYPUCK_DB_PATH", str(Path.home() / ".moneypuck" / "tracker.db")))
+def _resolve_db_path() -> Path:
+    """Resolve database path with 3-tier priority.
+
+    1. RAILWAY_VOLUME_MOUNT_PATH (auto-set by Railway when volume attached)
+    2. MONEYPUCK_DB_PATH (explicit override)
+    3. ~/.moneypuck/tracker.db (local dev fallback)
+    """
+    railway_mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+    if railway_mount:
+        path = Path(railway_mount) / "tracker.db"
+        log.info("Using Railway volume: %s", path)
+        return path
+
+    explicit = os.getenv("MONEYPUCK_DB_PATH")
+    if explicit:
+        return Path(explicit)
+
+    return Path.home() / ".moneypuck" / "tracker.db"
+
+
+DB_PATH = _resolve_db_path()
 
 _SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
