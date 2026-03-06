@@ -4,7 +4,8 @@
   "workflow": {
     "auto_commit": true,
     "research_before_planning": true,
-    "parallel_agents": true
+    "parallel_agents": true,
+    "_auto_chain_active": false
   },
   "models": {
     "researcher": "sonnet",
