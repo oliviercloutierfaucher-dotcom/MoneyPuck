@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+stopped_at: Completed 02-01-PLAN.md (Task 3 awaiting human action)
+last_updated: "2026-03-06T22:28:39.088Z"
+progress:
+  total_phases: 11
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
+---
+
 # Project State
 
 ## Current Milestone
@@ -22,12 +36,14 @@
 - Odds caching at web_preview.py level only (CLI/backtester uncached)
 - 90-second TTL for odds response cache
 - Cache bypass via ?refresh=1 query param
+- [Phase 02]: Single CI job, no matrix -- 466 tests in 11s
+- [Phase 02]: Test deps in requirements.txt (no separate dev file)
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Phase 1 complete, ready for Phase 2
+- **Stopped at:** Completed 02-01-PLAN.md (Task 3 awaiting human action)
 - **Timestamp:** 2026-03-06T21:45:00Z
 
 ---
