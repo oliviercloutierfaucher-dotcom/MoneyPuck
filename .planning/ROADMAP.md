@@ -49,7 +49,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md — Fix failing test, add CI workflow, enable Railway deploy gating
+- [x] 02-01-PLAN.md — Fix failing test, add CI workflow, enable Railway deploy gating
 
 **Approach:**
 - Add `.github/workflows/ci.yml` — run pytest on push and PR

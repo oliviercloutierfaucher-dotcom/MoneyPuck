@@ -69,9 +69,9 @@ No public proof that the model works. Critical for building trust.
 
 ### R8: CI/CD Pipeline (P2 — Quality)
 No automated testing on push. No deploy gate.
-- **R8.1** GitHub Actions workflow: run pytest on push/PR
-- **R8.2** Railway waits for CI pass before deploying
-- **R8.3** Test suite runs in <60 seconds
+- [x] **R8.1** GitHub Actions workflow: run pytest on push/PR
+- [x] **R8.2** Railway waits for CI pass before deploying
+- [x] **R8.3** Test suite runs in <60 seconds (23s achieved)
 - **Success:** Broken code cannot reach production
 
 ### R9: User Authentication (P2 — Monetization Prep)
