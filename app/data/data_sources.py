@@ -453,13 +453,17 @@ def fetch_moneypuck_games(season: int) -> list[dict[str, str]]:
 def fetch_team_game_by_game(
     season: int,
     teams: list[str] | None = None,
+    *,
+    fallback_to_bulk: bool = True,
 ) -> list[dict[str, str]]:
     """Fetch per-team game-by-game data from MoneyPuck with 100+ advanced metrics.
 
     This endpoint provides score-adjusted xG, flurry-adjusted xG, danger-zone
     breakdowns, rebound control, faceoffs, giveaways/takeaways, and more.
 
-    Falls back to the bulk games.csv if per-team fetches fail.
+    Falls back to the bulk games.csv if per-team fetches fail (unless
+    fallback_to_bulk is False, which is useful for multi-season loading
+    where we want to skip unavailable seasons rather than hitting a 403).
     """
     target_teams = teams or NHL_TEAMS
     # MoneyPuck directory year matches the season start year
@@ -488,8 +492,12 @@ def fetch_team_game_by_game(
         )
 
     if not all_rows:
-        log.warning("No team game-by-game data fetched, falling back to bulk CSV")
-        return fetch_moneypuck_games(season)
+        if fallback_to_bulk:
+            log.warning("No team game-by-game data fetched, falling back to bulk CSV")
+            return fetch_moneypuck_games(season)
+        else:
+            log.warning("No team game-by-game data fetched for season %d (no bulk fallback)", season)
+            return []
 
     log.info(
         "Loaded %d team-game rows across %d teams (season %d)",

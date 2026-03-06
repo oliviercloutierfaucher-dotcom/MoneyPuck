@@ -40,6 +40,8 @@ def backtest_season(
     games_rows: list[dict[str, str]],
     config: TrackerConfig,
     train_window_days: int = 60,
+    *,
+    elo_tracker: EloTracker | None = None,
 ) -> list[dict[str, Any]]:
     """Replay a season of MoneyPuck data to evaluate model predictions.
 
@@ -57,6 +59,12 @@ def backtest_season(
     train_window_days:
         Only use games from the last N days for training (default 60).
         Earlier games are excluded entirely (not just down-weighted).
+    elo_tracker:
+        Optional pre-built EloTracker with carry-over ratings from a
+        previous season. When provided, this tracker is used for Elo
+        predictions instead of building fresh from training data.
+        The tracker is also updated with each game's results so it
+        accumulates the current season's data.
 
     Returns a list of prediction dicts, each containing:
         - game_date, home_team, away_team
@@ -102,6 +110,12 @@ def backtest_season(
 
     sorted_dates = sorted(date_groups.keys())
 
+    # If an external Elo tracker was provided, use it for predictions.
+    # We also track which games we've already fed into it so we can
+    # incrementally update it as the season progresses.
+    _external_elo = elo_tracker is not None
+    _elo_seen_keys: set[str] = set()
+
     predictions: list[dict[str, Any]] = []
 
     for i, test_date_str in enumerate(sorted_dates):
@@ -126,11 +140,34 @@ def backtest_season(
         agent.REGRESSION_K = regression_k
         strength = agent.run(train_rows)
 
-        # Build Elo ratings from training data
-        try:
-            elo_tracker = build_elo_ratings(train_rows)
-        except Exception:
-            elo_tracker = None
+        # Elo: use external tracker if provided, otherwise build fresh
+        if _external_elo:
+            # Update the external tracker with any new games we haven't seen
+            for dt, row in games_with_dates:
+                if dt >= test_dt:
+                    break
+                if is_team_gbg:
+                    h = row.get("playerTeam", "")
+                    a = row.get("opposingTeam", "")
+                    hg = int(float(row.get("goalsFor", "0")))
+                    ag = int(float(row.get("goalsAgainst", "0")))
+                else:
+                    h = row.get("homeTeamCode", "")
+                    a = row.get("awayTeamCode", "")
+                    hg = int(float(row.get("goalsFor", "0")))
+                    ag = int(float(row.get("goalsAgainst", "0")))
+                raw_date = row.get("gameDate", "")[:10]
+                game_key = f"{raw_date}-{h}-{a}"
+                if game_key not in _elo_seen_keys and h and a and hg != ag:
+                    _elo_seen_keys.add(game_key)
+                    elo_tracker.update(h, a, hg, ag)
+            current_elo = elo_tracker
+        else:
+            # Build fresh Elo from training data (original behavior)
+            try:
+                current_elo = build_elo_ratings(train_rows)
+            except Exception:
+                current_elo = None
 
         # Predict each game on this date
         for game_row in date_groups[test_date_str]:
@@ -157,8 +194,8 @@ def backtest_season(
             )
 
             # Blend with Elo
-            if elo_tracker is not None:
-                elo_home = elo_tracker.predict(home_team, away_team)
+            if current_elo is not None:
+                elo_home = current_elo.predict(home_team, away_team)
                 home_prob = (1 - ELO_WEIGHT) * logistic_home + ELO_WEIGHT * elo_home
             else:
                 home_prob = logistic_home

@@ -189,7 +189,7 @@ class TestEloCarryOver(unittest.TestCase):
             date_str = f"20250115"
             rows.append(make_game_row(home, away, 2 + (i % 3), 1, date_str))
 
-        config = TrackerConfig(season=2024)
+        config = TrackerConfig(odds_api_key="", season=2024)
 
         # Pre-built tracker with non-default ratings
         pre_built = EloTracker({"BOS": 1600, "TOR": 1550, "MTL": 1450})
@@ -249,7 +249,7 @@ class TestBacktestSeasonBackwardCompatible(unittest.TestCase):
             date_str = f"2024{month:02d}{day:02d}"
             rows.append(make_game_row(home, away, 3, 2, date_str))
 
-        config = TrackerConfig(season=2024)
+        config = TrackerConfig(odds_api_key="", season=2024)
 
         # Call without elo_tracker -- must work without error
         preds = backtest_season(rows, config)
