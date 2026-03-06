@@ -66,6 +66,12 @@ Plans:
 
 **Requirements:** R2.1, R2.2, R2.3, R2.4
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Multi-season data loader, historical team codes, Elo carry-over support
+- [ ] 03-02-PLAN.md — Walk-forward orchestrator, parameter stability analysis, verdict report, CLI integration
+
 **Approach:**
 - Extend backtester to load 2022-23, 2023-24 MoneyPuck data
 - Walk-forward: train on prior seasons, test on next
