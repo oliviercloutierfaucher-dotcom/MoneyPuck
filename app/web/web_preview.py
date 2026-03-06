@@ -4,8 +4,10 @@ import json
 import math
 import os
 import random
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from app.data.data_sources import get_books_for_region, QUEBEC_BOOKS, team_code, TEAM_NAME_TO_CODE
@@ -37,6 +39,30 @@ from app.web.presentation import render_dashboard, render_html_preview, to_seria
 from app.core.service import build_market_snapshot, score_snapshot
 
 log = get_logger("web_preview")
+
+
+class TTLCache:
+    """Simple in-memory cache with per-key TTL."""
+
+    def __init__(self, ttl_seconds: float = 90.0) -> None:
+        self._ttl = ttl_seconds
+        self._store: dict[str, tuple[float, Any]] = {}
+
+    def get(self, key: str) -> Any | None:
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        ts, value = entry
+        if time.monotonic() - ts > self._ttl:
+            del self._store[key]
+            return None
+        return value
+
+    def set(self, key: str, value: Any) -> None:
+        self._store[key] = (time.monotonic(), value)
+
+
+_snapshot_cache = TTLCache(ttl_seconds=90.0)
 
 SUPPORTED_REGIONS = {"ca", "us", "qc", "on"}
 
@@ -462,14 +488,26 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
     Uses live odds from The Odds API. When MoneyPuck data is unavailable
     (403 in cloud environments), falls back to calibrated demo strength
     ratings so the model still produces meaningful probabilities.
+
+    Results are cached for 90 seconds to reduce Odds API credit burn.
+    Pass ``refresh=1`` query param to bypass cache.
     """
     config = _build_config(params)
     region = params.get("region", ["qc"])[0]
+    force_refresh = params.get("refresh", ["0"])[0] in {"1", "true", "yes"}
     books_map = get_books_for_region(region)
     book_display_names = set(books_map.values())
 
-    snapshot, games_rows = build_market_snapshot(config)
-    recommendations = score_snapshot(snapshot, config, games_rows)
+    cache_key = f"dashboard:{region}:{config.bookmakers}"
+    cached = None if force_refresh else _snapshot_cache.get(cache_key)
+
+    if cached is not None:
+        log.debug("Cache hit for %s", cache_key)
+        snapshot, games_rows, recommendations = cached
+    else:
+        snapshot, games_rows = build_market_snapshot(config)
+        recommendations = score_snapshot(snapshot, config, games_rows)
+        _snapshot_cache.set(cache_key, (snapshot, games_rows, recommendations))
     strength = snapshot.team_strength
 
     # If MoneyPuck failed (0 teams), use demo strength ratings
