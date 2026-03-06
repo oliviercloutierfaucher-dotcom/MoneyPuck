@@ -24,9 +24,16 @@
 
 **Requirements:** R1.1, R1.2, R1.3
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Railway-aware DB path resolution, Dockerfile update, and odds response caching
+- [ ] 01-02-PLAN.md — Railway volume configuration and deploy verification (checkpoint)
+
 **Approach:**
 - Add Railway volume mount at `/data`
 - Update `database.py` to use `/data/tracker.db` when `RAILWAY_VOLUME_MOUNT_PATH` env var is set
+- Add server-side odds response caching (90s TTL) to reduce API credit burn
 - Test: deploy twice, verify data survives
 
 **Success:** Predictions persist across 3 consecutive deploys.
