@@ -1,16 +1,26 @@
-"""Multi-season data loading and historical team code mapping.
+"""Multi-season data loading, walk-forward validation, and parameter stability.
 
 Provides infrastructure for loading MoneyPuck data across multiple NHL seasons
 (2015+), handling historical team code changes (ARI -> UTA, SEA expansion),
-and gracefully skipping seasons where data is unavailable.
+walk-forward validation with Elo carry-over, parameter stability analysis,
+and overfit/drift/stable verdict determination.
 """
 
 from __future__ import annotations
 
+import statistics
 from typing import Any
 
+from app.core.backtester import (
+    backtest_season,
+    evaluate_predictions,
+    grid_search,
+    simulate_betting_roi,
+)
+from app.core.models import TrackerConfig
 from app.data.data_sources import NHL_TEAMS, fetch_team_game_by_game
 from app.logging_config import get_logger
+from app.math.elo import EloTracker
 
 log = get_logger("multi_season")
 
@@ -132,3 +142,214 @@ def load_seasons(
         len(loaded), loaded, len(skipped), skipped,
     )
     return seasons_data
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward validation
+# ---------------------------------------------------------------------------
+
+COVID_SEASON = 2020  # The 2020-21 season (56-game, hub cities)
+
+# Reduced grid for per-season search (81 combos vs 1050 default)
+REDUCED_PARAM_GRID = {
+    "half_life": [21, 30, 45],
+    "regression_k": [15, 20, 25],
+    "home_advantage": [0.10, 0.14, 0.20],
+    "logistic_k": [0.7, 0.9, 1.2],
+}
+
+
+def validate_multi_season(
+    seasons: dict[int, list[dict]] | None = None,
+    config: TrackerConfig | None = None,
+    mode: str = "fixed",
+    start_season: int = 2015,
+    end_season: int = 2024,
+) -> dict[str, Any]:
+    """Run walk-forward validation across multiple seasons.
+
+    Parameters
+    ----------
+    seasons : dict, optional
+        Pre-loaded seasons data. If None, calls load_seasons().
+    config : TrackerConfig, optional
+        Model configuration. Uses defaults if None.
+    mode : str
+        "fixed" -- run each season with production params.
+        "grid_search" -- find per-season optimal params via grid search.
+    start_season, end_season : int
+        Season range (used only if seasons is None).
+
+    Returns
+    -------
+    dict with: season_results, overall_pass, mode, config_used,
+    and (if grid_search) param_stability, verdict.
+    """
+    if seasons is None:
+        seasons = load_seasons(start_season, end_season)
+
+    if config is None:
+        config = TrackerConfig(odds_api_key="")
+
+    elo_tracker = EloTracker()
+    season_results: list[dict[str, Any]] = []
+    per_season_optimal: dict[int, dict[str, float]] = {}
+
+    for i, season in enumerate(sorted(seasons.keys())):
+        games = seasons[season]
+
+        # Regress Elo at season boundary (not for first season)
+        if i > 0:
+            elo_tracker.regress_to_mean()
+
+        # Run backtest with carried-over Elo
+        predictions = backtest_season(games, config, elo_tracker=elo_tracker)
+
+        # Evaluate
+        metrics = evaluate_predictions(predictions)
+        roi = simulate_betting_roi(predictions)
+
+        result: dict[str, Any] = {
+            "season": season,
+            "brier_score": metrics["brier_score"],
+            "accuracy": metrics["accuracy"],
+            "roi_pct": roi["roi_pct"],
+            "win_rate": roi["win_rate"],
+            "n_predictions": metrics["n_predictions"],
+            "is_covid": season == COVID_SEASON,
+        }
+        season_results.append(result)
+
+        # Grid search mode: find per-season optimal params
+        if mode == "grid_search":
+            gs_results = grid_search(
+                games, config, param_grid=REDUCED_PARAM_GRID,
+            )
+            if gs_results:
+                best = gs_results[0]
+                per_season_optimal[season] = best["params"]
+
+    # Overall pass/fail: every season must have accuracy >= 0.55 AND roi > 0
+    overall_pass = all(
+        r["accuracy"] >= 0.55 and r["roi_pct"] > 0.0
+        for r in season_results
+    )
+
+    output: dict[str, Any] = {
+        "season_results": season_results,
+        "overall_pass": overall_pass,
+        "mode": mode,
+        "config_used": {
+            "half_life": getattr(config, "half_life", 30.0),
+            "regression_k": getattr(config, "regression_k", 20),
+            "home_advantage": getattr(config, "home_advantage", 0.14),
+            "logistic_k": getattr(config, "logistic_k", 0.9),
+        },
+    }
+
+    if mode == "grid_search" and per_season_optimal:
+        stability = analyze_parameter_stability(per_season_optimal)
+        verdict = determine_verdict(season_results, stability)
+        output["param_stability"] = stability
+        output["verdict"] = verdict
+
+    return output
+
+
+# ---------------------------------------------------------------------------
+# Parameter stability analysis
+# ---------------------------------------------------------------------------
+
+def analyze_parameter_stability(
+    per_season_optimal: dict[int, dict[str, float]],
+) -> dict[str, dict[str, Any]]:
+    """Compute drift metrics for each tunable parameter across seasons.
+
+    Parameters
+    ----------
+    per_season_optimal : dict
+        Mapping of season -> {param_name: optimal_value}.
+
+    Returns
+    -------
+    dict mapping param_name -> {mean, stdev, min, max,
+    coefficient_of_variation, values_by_season}.
+    """
+    if not per_season_optimal:
+        return {}
+
+    # Collect all param names from first entry
+    param_names = list(next(iter(per_season_optimal.values())).keys())
+    stability: dict[str, dict[str, Any]] = {}
+
+    for param in param_names:
+        values = [
+            per_season_optimal[s][param]
+            for s in sorted(per_season_optimal.keys())
+        ]
+        mean = statistics.mean(values)
+
+        if len(values) >= 2:
+            stdev = statistics.stdev(values)
+        else:
+            stdev = 0.0
+
+        cv = stdev / mean if mean != 0 else 0.0
+
+        stability[param] = {
+            "mean": mean,
+            "stdev": stdev,
+            "min": min(values),
+            "max": max(values),
+            "coefficient_of_variation": cv,
+            "values_by_season": {
+                s: per_season_optimal[s][param]
+                for s in sorted(per_season_optimal.keys())
+            },
+        }
+
+    return stability
+
+
+# ---------------------------------------------------------------------------
+# Verdict determination
+# ---------------------------------------------------------------------------
+
+def determine_verdict(
+    season_results: list[dict[str, Any]],
+    param_stability: dict[str, dict[str, Any]] | None = None,
+) -> str:
+    """Determine overall model verdict based on season results and drift.
+
+    Returns one of:
+    - "VERDICT: Parameters are STABLE across seasons"
+    - "VERDICT: Model performs well but parameters show DRIFT ..."
+    - "VERDICT: Parameters are OVERFIT ..."
+    """
+    # Check 1: all seasons pass the strict criteria
+    all_pass = all(
+        r["accuracy"] >= 0.55 and r["roi_pct"] > 0.0
+        for r in season_results
+    )
+
+    # Check 2: parameter drift (any param CV > 0.3)
+    high_drift = False
+    if param_stability:
+        high_drift = any(
+            p.get("coefficient_of_variation", 0) > 0.3
+            for p in param_stability.values()
+        )
+
+    if not all_pass:
+        return (
+            "VERDICT: Parameters are OVERFIT -- "
+            "model fails on held-out seasons"
+        )
+
+    if high_drift:
+        return (
+            "VERDICT: Model performs well but parameters show DRIFT -- "
+            "current params may be season-specific"
+        )
+
+    return "VERDICT: Parameters are STABLE across seasons"
