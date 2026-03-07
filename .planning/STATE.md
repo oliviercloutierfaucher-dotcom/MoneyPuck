@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Phase 5 context gathered
-last_updated: "2026-03-07T22:37:50.965Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-07T23:10:46.648Z"
 progress:
   total_phases: 11
   completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 9
+  completed_plans: 8
 ---
 
 ---
@@ -67,12 +67,15 @@ progress:
 - [Phase 04]: Confirmed starters passed as parameter to TeamStrengthAgent.run() for testability
 - [Phase 04]: DailyFaceoff fetched in parallel thread pool alongside odds and goalie stats
 - [Phase 04]: starter_source defaults to gp_leader ensuring backward compatibility
+- [Phase 05]: ESPN injuries API as primary injury data source (free, structured JSON, no auth)
+- [Phase 05]: Goalie injuries excluded from adjustment (Phase 4 handles via backup save%)
+- [Phase 05]: Last-name matching for player lookup between ESPN and NHL API data
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Phase 5 context gathered
+- **Stopped at:** Completed 05-01-PLAN.md
 - **Timestamp:** 2026-03-07T16:50:00Z
 
 ---
