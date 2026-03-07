@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-07T23:10:46.648Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-07T23:18:55.257Z"
 progress:
   total_phases: 11
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 ---
@@ -70,12 +70,15 @@ progress:
 - [Phase 05]: ESPN injuries API as primary injury data source (free, structured JSON, no auth)
 - [Phase 05]: Goalie injuries excluded from adjustment (Phase 4 handles via backup save%)
 - [Phase 05]: Last-name matching for player lookup between ESPN and NHL API data
+- [Phase 05]: injury_adj in probability units (pp/100), not raw pp like goalie_adj
+- [Phase 05]: Dashboard shows only top-tier injuries (top6_f, top4_d, starting_g) to avoid clutter
+- [Phase 05]: build_market_snapshot returns 3-tuple (snapshot, games_rows, injuries) for transparency
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Completed 05-01-PLAN.md
+- **Stopped at:** Completed 05-02-PLAN.md
 - **Timestamp:** 2026-03-07T16:50:00Z
 
 ---
