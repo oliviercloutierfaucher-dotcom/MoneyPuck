@@ -315,3 +315,76 @@ def test_infer_likely_starter_no_match():
     result = nhl_api.infer_likely_starter("SEA", goalie_stats)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: fetch_game_goalies
+# ---------------------------------------------------------------------------
+
+GAMECENTER_LANDING_RESPONSE = {
+    "homeTeam": {"abbrev": "BOS"},
+    "awayTeam": {"abbrev": "NYR"},
+    "matchup": {
+        "goalieComparison": {
+            "homeTeam": {
+                "leaders": [
+                    {
+                        "playerId": 8480280,
+                        "name": {"default": "J. Swayman"},
+                        "gamesPlayed": 40,
+                        "savePctg": 0.905,
+                        "gaa": 2.85,
+                    },
+                    {
+                        "playerId": 8476914,
+                        "name": {"default": "J. Korpisalo"},
+                        "gamesPlayed": 24,
+                        "savePctg": 0.893,
+                        "gaa": 3.20,
+                    },
+                ]
+            },
+            "awayTeam": {
+                "leaders": [
+                    {
+                        "playerId": 8478048,
+                        "name": {"default": "I. Shesterkin"},
+                        "gamesPlayed": 55,
+                        "savePctg": 0.921,
+                        "gaa": 2.30,
+                    },
+                ]
+            },
+        },
+    },
+}
+
+
+@patch("app.data.nhl_api._fetch_json")
+def test_fetch_game_goalies_parses(mock_fetch):
+    """Gamecenter landing response -> dict keyed by team abbrev with goalie lists."""
+    mock_fetch.return_value = GAMECENTER_LANDING_RESPONSE
+
+    result = nhl_api.fetch_game_goalies(2025020990)
+
+    assert "BOS" in result
+    assert "NYR" in result
+    assert len(result["BOS"]) == 2
+    assert len(result["NYR"]) == 1
+
+    swayman = result["BOS"][0]
+    assert swayman["player_id"] == 8480280
+    assert swayman["name"] == "J. Swayman"
+    assert swayman["games_played"] == 40
+    assert abs(swayman["save_pct"] - 0.905) < 1e-6
+    assert abs(swayman["gaa"] - 2.85) < 1e-6
+
+
+@patch("app.data.nhl_api._fetch_json")
+def test_fetch_game_goalies_api_failure(mock_fetch):
+    """API failure -> returns empty dict."""
+    mock_fetch.return_value = {}
+
+    result = nhl_api.fetch_game_goalies(9999999)
+
+    assert result == {}
