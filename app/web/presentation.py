@@ -306,6 +306,30 @@ def render_dashboard(data: dict[str, Any]) -> str:
       padding: 1px 8px; font-size: 10px; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.04em;
     }}
+    /* Injury display */
+    .injury-section {{
+      padding: 0 16px 6px; display: flex; justify-content: space-between; gap: 8px;
+    }}
+    .injury-line {{
+      font-size: 11px; color: var(--muted); line-height: 1.4;
+      max-width: 48%;
+    }}
+    .injury-line .injury-label {{
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-2); margin-bottom: 1px;
+    }}
+    .injury-line .injury-tag {{
+      color: var(--red); font-weight: 500;
+    }}
+    .injury-line .injury-status {{
+      font-style: italic; color: var(--muted); font-size: 10px;
+    }}
+    .injury-significant {{
+      display: inline-flex; align-items: center; gap: 3px;
+      color: var(--amber); font-size: 10px; font-weight: 600;
+      padding: 1px 6px; border-radius: 4px;
+      background: var(--amber-bg);
+    }}
     /* Probability buttons (Model vs Street) */
     .prob-section-label {{
       padding: 0 16px; margin-bottom: 4px; font-size: 9px;
@@ -1513,6 +1537,34 @@ function buildSparkPolyline(pts, w, h, color, dashed) {{
  * @param {{object}} g - game object
  * @returns {{string}} HTML string for the sparkline strip
  */
+function renderInjurySection(g) {{
+  const inj = g.injuries;
+  if (!inj) return '';
+  const homeInj = inj.home || [];
+  const awayInj = inj.away || [];
+  if (!homeInj.length && !awayInj.length) return '';
+
+  function formatPlayers(players) {{
+    return players.map(p => {{
+      const statusAbbr = p.status.includes('Day-To-Day') ? 'DTD' : p.status.includes('Out') ? 'OUT' : p.status.includes('IR') ? 'IR' : p.status.slice(0, 3).toUpperCase();
+      return `<span class="injury-tag">${{esc(p.name.split(' ').pop())}}</span> <span class="injury-status">(${{statusAbbr}})</span>`;
+    }}).join(', ');
+  }}
+
+  let html = '<div class="injury-section">';
+  if (awayInj.length) {{
+    html += `<div class="injury-line"><div class="injury-label">${{esc(g.away)}} Key Out</div>${{formatPlayers(awayInj)}}</div>`;
+  }}
+  if (homeInj.length) {{
+    html += `<div class="injury-line"><div class="injury-label">${{esc(g.home)}} Key Out</div>${{formatPlayers(homeInj)}}</div>`;
+  }}
+  if (inj.significant) {{
+    html += `<span class="injury-significant">${{inj.adj_pp}}pp swing</span>`;
+  }}
+  html += '</div>';
+  return html;
+}}
+
 function renderCardSparkline(g) {{
   const data = g.sparkline || [];
   if (!data.length) return '';
@@ -1651,6 +1703,7 @@ function renderGameCard(g, bets, idx) {{
           <span class="game-time">${{time}}</span>
         </div>
       </div>
+      ${{renderInjurySection(g)}}
       <div class="prob-section-label model-label">Our Model</div>
       <div class="prob-buttons">
         <div class="prob-btn ${{!homeFav ? 'fav' : ''}}">

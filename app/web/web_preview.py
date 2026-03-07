@@ -36,6 +36,7 @@ from app.math.math_utils import (
 )
 from app.core.models import TrackerConfig, ValueCandidate
 from app.web.presentation import render_dashboard, render_html_preview, to_serializable
+from app.core.injury_impact import build_player_tiers, calculate_injury_adjustment
 from app.core.service import build_market_snapshot, score_snapshot
 
 log = get_logger("web_preview")
@@ -503,17 +504,25 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
 
     if cached is not None:
         log.debug("Cache hit for %s", cache_key)
-        snapshot, games_rows, recommendations = cached
+        snapshot, games_rows, recommendations, injuries = cached
     else:
         snapshot, games_rows, injuries = build_market_snapshot(config)
         recommendations = score_snapshot(snapshot, config, games_rows, injuries)
-        _snapshot_cache.set(cache_key, (snapshot, games_rows, recommendations))
+        _snapshot_cache.set(cache_key, (snapshot, games_rows, recommendations, injuries))
     strength = snapshot.team_strength
 
     # If MoneyPuck failed (0 teams), use demo strength ratings
     use_demo_strength = len(strength) < 10
     if use_demo_strength:
         log.info("Using demo strength ratings (MoneyPuck unavailable)")
+
+    # Pre-compute injury tiers for dashboard display
+    _injury_tiers = {}
+    if injuries:
+        try:
+            _injury_tiers = build_player_tiers(injuries)
+        except Exception:
+            log.debug("Injury tier build failed for dashboard")
 
     # Build per-game data with per-book odds
     games = []
@@ -642,6 +651,27 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             if away_m:
                 away_starter_source = getattr(away_m, "starter_source", "gp_leader")
 
+        # Injury enrichment for dashboard display
+        game_injury_data = {"home": [], "away": [], "adj_pp": 0, "significant": False}
+        if injuries:
+            try:
+                inj_adj, inj_players = calculate_injury_adjustment(home, away, injuries, _injury_tiers)
+                top_tiers = {"top6_f", "top4_d", "starting_g"}
+                game_injury_data = {
+                    "home": [
+                        {"name": p.player_name, "pos": p.position, "status": p.status, "tier": p.tier}
+                        for p in inj_players if p.team == home and p.tier in top_tiers
+                    ],
+                    "away": [
+                        {"name": p.player_name, "pos": p.position, "status": p.status, "tier": p.tier}
+                        for p in inj_players if p.team == away and p.tier in top_tiers
+                    ],
+                    "adj_pp": round(abs(inj_adj * 100), 1),
+                    "significant": abs(inj_adj * 100) > 2.0,
+                }
+            except Exception:
+                log.debug("Injury enrichment failed for %s @ %s", away, home)
+
         games.append({
             "home": home,
             "away": away,
@@ -654,6 +684,7 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             "prop_edges": game_prop_edges,
             "home_starter_source": home_starter_source,
             "away_starter_source": away_starter_source,
+            "injuries": game_injury_data,
         })
 
     # Rebuild value bets using demo strength if needed
