@@ -88,6 +88,12 @@ Plans:
 
 **Requirements:** R3.1, R3.2, R3.3, R3.4
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — DailyFaceoff scraper, NHL API gamecenter goalie enrichment, 3-tier resolution logic
+- [ ] 04-02-PLAN.md — Pipeline integration into TeamStrengthAgent, starter_source labeling, backup-start Brier validation
+
 **Approach:**
 - Add goalie confirmation fetcher (DailyFaceoff scraper or NHL API)
 - Integrate confirmed goalie save%/GSAx into TeamStrengthAgent
