@@ -7,7 +7,7 @@
 | 1 | Persistent Storage | R1 | P0 — data loss on every deploy | No (foundation) |
 | 2 | CI/CD Pipeline | R8 | P2 — safety net before big changes | No (quick win) |
 | 3 | Multi-Season Validation | R2 | P0 — model trust | No (blocks model work) |
-| 4 | Starting Goalies | R3 | P1 — highest single-feature impact | Yes (with 5) |
+| 4 | 2/2 | Complete   | 2026-03-07 | Yes (with 5) |
 | 5 | Injury Impact System | R4 | P1 — second-highest impact | Yes (with 4) |
 | 6 | FastAPI Migration | R5.1-R5.2 | P1 — backend swap | No (breaks web layer) |
 | 7 | Dashboard Rebuild | R5.3-R5.7 | P1 — professional UI | No (depends on 6) |
@@ -88,7 +88,7 @@ Plans:
 
 **Requirements:** R3.1, R3.2, R3.3, R3.4
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 04-01-PLAN.md — DailyFaceoff scraper, NHL API gamecenter goalie enrichment, 3-tier resolution logic
