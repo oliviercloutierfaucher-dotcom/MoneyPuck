@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-07T05:31:46.179Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-07T05:36:47.949Z"
 progress:
   total_phases: 11
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 ---
@@ -54,12 +54,13 @@ progress:
 - [Phase 02]: Test deps in requirements.txt (no separate dev file)
 - [Phase 03]: Historical team codes via era boundaries (ARI->UTA 2024, SEA 2021, VGK 2017)
 - [Phase 03]: Elo carry-over via optional elo_tracker param with incremental game updates
+- [Phase 03]: Reduced grid search to 81 combos per season; CV>0.3 threshold for drift; strict pass/fail requires >=55% accuracy AND positive ROI every season
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Completed 03-01-PLAN.md
+- **Stopped at:** Completed 03-02-PLAN.md
 - **Timestamp:** 2026-03-06T23:00:00Z
 
 ---
