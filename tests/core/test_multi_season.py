@@ -541,5 +541,106 @@ class TestStrictPassFail(unittest.TestCase):
         self.assertFalse(result["overall_pass"])
 
 
+class TestFormatMultiSeasonReport(unittest.TestCase):
+    """format_multi_season_report() produces readable output."""
+
+    def test_report_contains_verdict(self):
+        from app.core.multi_season import format_multi_season_report
+
+        results = {
+            "mode": "grid_search",
+            "config_used": {
+                "half_life": 30, "regression_k": 20,
+                "home_advantage": 0.14, "logistic_k": 0.9,
+            },
+            "season_results": [
+                {"season": 2022, "n_predictions": 400, "accuracy": 0.58,
+                 "brier_score": 0.240, "roi_pct": 5.2, "win_rate": 0.58,
+                 "is_covid": False},
+            ],
+            "overall_pass": True,
+            "param_stability": {
+                "half_life": {"mean": 30, "stdev": 0, "min": 30,
+                              "max": 30, "coefficient_of_variation": 0.0},
+            },
+            "verdict": "VERDICT: Parameters are STABLE across seasons",
+        }
+        report = format_multi_season_report(results)
+        self.assertIn("VERDICT:", report)
+        self.assertIn("STABLE", report)
+        self.assertIn("2022", report)
+        self.assertIn("MULTI-SEASON VALIDATION REPORT", report)
+
+    def test_report_covid_flag(self):
+        from app.core.multi_season import format_multi_season_report
+
+        results = {
+            "mode": "fixed",
+            "config_used": {"half_life": 30, "regression_k": 20,
+                           "home_advantage": 0.14, "logistic_k": 0.9},
+            "season_results": [
+                {"season": 2020, "n_predictions": 200, "accuracy": 0.56,
+                 "brier_score": 0.245, "roi_pct": 2.0, "win_rate": 0.56,
+                 "is_covid": True},
+            ],
+            "overall_pass": True,
+        }
+        report = format_multi_season_report(results)
+        self.assertIn("COVID", report)
+
+    def test_report_per_season_rows(self):
+        from app.core.multi_season import format_multi_season_report
+
+        results = {
+            "mode": "fixed",
+            "config_used": {"half_life": 30, "regression_k": 20,
+                           "home_advantage": 0.14, "logistic_k": 0.9},
+            "season_results": [
+                {"season": 2022, "n_predictions": 400, "accuracy": 0.58,
+                 "brier_score": 0.240, "roi_pct": 5.2, "win_rate": 0.58,
+                 "is_covid": False},
+                {"season": 2023, "n_predictions": 410, "accuracy": 0.57,
+                 "brier_score": 0.241, "roi_pct": 4.0, "win_rate": 0.57,
+                 "is_covid": False},
+            ],
+            "overall_pass": True,
+        }
+        report = format_multi_season_report(results)
+        self.assertIn("2022", report)
+        self.assertIn("2023", report)
+        self.assertIn("PASS", report)
+
+
+class TestCLIArgParsing(unittest.TestCase):
+    """--validate-seasons CLI flag is recognized."""
+
+    def test_validate_seasons_flag(self):
+        from tracker import parse_args
+        import sys
+
+        original_argv = sys.argv
+        try:
+            sys.argv = ["tracker.py", "--validate-seasons",
+                        "--odds-api-key", "test"]
+            args = parse_args()
+            self.assertTrue(args.validate_seasons)
+        finally:
+            sys.argv = original_argv
+
+    def test_validate_seasons_with_json(self):
+        from tracker import parse_args
+        import sys
+
+        original_argv = sys.argv
+        try:
+            sys.argv = ["tracker.py", "--validate-seasons", "--json",
+                        "--odds-api-key", "test"]
+            args = parse_args()
+            self.assertTrue(args.validate_seasons)
+            self.assertTrue(args.json)
+        finally:
+            sys.argv = original_argv
+
+
 if __name__ == "__main__":
     unittest.main()

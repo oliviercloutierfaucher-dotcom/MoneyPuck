@@ -48,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logistic-k", type=float, default=0.9, help="Logistic scaling constant")
     parser.add_argument("--goalie-impact", type=float, default=1.5, help="Goalie save%% impact scaling factor")
     parser.add_argument("--backtest", action="store_true", help="Run backtesting against historical data")
+    parser.add_argument("--validate-seasons", action="store_true", help="Run multi-season walk-forward validation")
     parser.add_argument("--log-level", default=None, help="Logging level (DEBUG, INFO, WARNING, ERROR)")
     return parser.parse_args()
 
@@ -244,6 +245,32 @@ def main() -> int:
                     print(f"  Errors:  {len(result['errors'])}")
                     for e in result["errors"]:
                         print(f"    - {e}")
+            return 0
+
+        if args.validate_seasons:
+            from app.core.multi_season import (
+                validate_multi_season,
+                format_multi_season_report,
+            )
+            log.info("Starting multi-season validation (this may take several minutes)...")
+            print("Starting multi-season validation (this may take several minutes)...")
+
+            # Run fixed-params mode
+            fixed_result = validate_multi_season(config=config, mode="fixed")
+
+            # Run grid-search mode
+            gs_result = validate_multi_season(config=config, mode="grid_search")
+
+            if args.json:
+                output = {
+                    "fixed": fixed_result,
+                    "grid_search": gs_result,
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                print(format_multi_season_report(fixed_result))
+                print()
+                print(format_multi_season_report(gs_result))
             return 0
 
         if args.backtest:

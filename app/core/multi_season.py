@@ -353,3 +353,100 @@ def determine_verdict(
         )
 
     return "VERDICT: Parameters are STABLE across seasons"
+
+
+# ---------------------------------------------------------------------------
+# Report formatting
+# ---------------------------------------------------------------------------
+
+def format_multi_season_report(results: dict[str, Any]) -> str:
+    """Format walk-forward validation results into a human-readable report.
+
+    Parameters
+    ----------
+    results : dict
+        Output from validate_multi_season().
+
+    Returns
+    -------
+    str
+        Formatted multi-line report string.
+    """
+    w = 76
+    lines: list[str] = []
+
+    lines.append("=" * w)
+    lines.append("  MONEYPUCK EDGE -- MULTI-SEASON VALIDATION REPORT")
+    lines.append("=" * w)
+
+    # Mode
+    mode = results.get("mode", "fixed")
+    if mode == "fixed":
+        lines.append("\n  Mode: Fixed Parameters")
+    else:
+        lines.append("\n  Mode: Per-Season Grid Search")
+
+    # Config used
+    cfg = results.get("config_used", {})
+    lines.append(
+        f"  Config: home_advantage={cfg.get('home_advantage', '?')}, "
+        f"logistic_k={cfg.get('logistic_k', '?')}, "
+        f"half_life={cfg.get('half_life', '?')}, "
+        f"regression_k={cfg.get('regression_k', '?')}"
+    )
+
+    # Per-season table
+    lines.append(f"\n  {'Season':<8} {'Games':>7} {'Win Rate':>10} "
+                 f"{'Brier':>7} {'ROI':>8} {'Status':>8}  Notes")
+    lines.append("  " + "-" * 68)
+
+    season_results = results.get("season_results", [])
+    for sr in season_results:
+        season = sr["season"]
+        n = sr.get("n_predictions", 0)
+        win_rate = sr.get("accuracy", 0)
+        brier = sr.get("brier_score", 0)
+        roi = sr.get("roi_pct", 0)
+        passes = win_rate >= 0.55 and roi > 0
+        status = "PASS" if passes else "FAIL"
+        notes = ""
+        if sr.get("is_covid"):
+            notes = "*COVID (56-game season)*"
+
+        lines.append(
+            f"  {season:<8} {n:>7} {win_rate:>9.1%} "
+            f"{brier:>7.3f} {roi:>+7.1f}% {status:>8}  {notes}"
+        )
+
+    # Parameter stability table (grid_search mode only)
+    stability = results.get("param_stability")
+    if stability:
+        lines.append(f"\n  PARAMETER STABILITY")
+        lines.append(f"  {'Param':<18} {'Mean':>8} {'StdDev':>8} "
+                     f"{'Min':>8} {'Max':>8} {'CV':>6}  Verdict")
+        lines.append("  " + "-" * 68)
+        for param, stats in stability.items():
+            cv = stats.get("coefficient_of_variation", 0)
+            p_verdict = "STABLE" if cv <= 0.3 else "DRIFT"
+            lines.append(
+                f"  {param:<18} {stats['mean']:>8.3f} {stats['stdev']:>8.3f} "
+                f"{stats['min']:>8.3f} {stats['max']:>8.3f} "
+                f"{cv:>5.2f}  {p_verdict}"
+            )
+
+    # Overall pass/fail banner
+    overall = results.get("overall_pass", False)
+    lines.append("")
+    if overall:
+        lines.append("  [PASS] All seasons meet minimum criteria "
+                     "(>=55% win rate, positive ROI)")
+    else:
+        lines.append("  [FAIL] One or more seasons below minimum criteria")
+
+    # Verdict line
+    verdict = results.get("verdict")
+    if verdict:
+        lines.append(f"\n  {verdict}")
+
+    lines.append("\n" + "=" * w)
+    return "\n".join(lines)
