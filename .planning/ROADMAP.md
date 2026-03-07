@@ -112,11 +112,19 @@ Plans:
 
 **Requirements:** R4.1, R4.2, R4.3, R4.4
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — ESPN injury fetcher, NHL club-stats player tier classifier, adjustment calculation engine
+- [ ] 05-02-PLAN.md — Pipeline integration into EdgeScoringAgent, service orchestration, dashboard injury display
+
 **Approach:**
-- Fetch injury reports from NHL API (already partially in nhl_api.py)
-- Build tiered impact table: top-6 F (~1.5-2.5 pp), top-4 D (~1-2 pp), starting G (~2-5 pp)
+- Fetch injury reports from ESPN API (structured JSON, free, no auth)
+- Classify players by TOI rank: top-6 F (~2pp), top-4 D (~1.5pp), bottom (~0.75pp)
 - Apply adjustment in EdgeScoringAgent alongside situational factors
-- Extend overrides.json for manual injury overrides
+- Skip goalie injuries in adjustment (Phase 4 handles via backup save%)
+- Manual overrides take priority; automated injuries layer separately
+- Dashboard shows key injuries on game cards
 
 **Success:** Model adjusts correctly for missing star players.
 
@@ -230,14 +238,14 @@ Plans:
 ## Dependency Graph
 
 ```
-Phase 1 (Storage) ──► Phase 8 (Automation) ──► Phase 9 (Performance)
-                  ──► Phase 6 (FastAPI) ──► Phase 7 (Dashboard)
-                                        ──► Phase 8 (Automation)
-                                        ──► Phase 10 (Auth)
-Phase 2 (CI/CD) ──► All subsequent phases
-Phase 3 (Validation) ──► Phase 11 (XGBoost)
+Phase 1 (Storage) ──> Phase 8 (Automation) ──> Phase 9 (Performance)
+                  ──> Phase 6 (FastAPI) ──> Phase 7 (Dashboard)
+                                        ──> Phase 8 (Automation)
+                                        ──> Phase 10 (Auth)
+Phase 2 (CI/CD) ──> All subsequent phases
+Phase 3 (Validation) ──> Phase 11 (XGBoost)
 Phase 4 (Goalies) ─┐
-Phase 5 (Injuries) ─┤──► Phase 11 (XGBoost) — needs new features as inputs
+Phase 5 (Injuries) ─┤──> Phase 11 (XGBoost) — needs new features as inputs
 ```
 
 ---
