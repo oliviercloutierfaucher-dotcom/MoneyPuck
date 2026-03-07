@@ -138,6 +138,12 @@ Plans:
 
 **Requirements:** R5.1, R5.2
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Create FastAPI app with all routes and Jinja2 template
+- [ ] 06-02-PLAN.md — Update Dockerfile, migrate tests, delete old server, visual verify
+
 **Approach:**
 - Install fastapi, uvicorn, jinja2
 - Convert `web_preview.py` do_GET routes to `@app.get()` decorators
