@@ -246,6 +246,50 @@ def infer_likely_starter(
     return max(candidates, key=lambda g: g.get("games_played", 0))
 
 
+def fetch_game_goalies(game_id: int) -> dict[str, list[dict[str, Any]]]:
+    """Fetch goalie data for a specific game from the NHL API.
+
+    Uses the ``/v1/gamecenter/{game_id}/landing`` endpoint to extract
+    goalie comparison data with per-goalie season stats.
+
+    Parameters
+    ----------
+    game_id : int
+        NHL game ID (e.g., 2025020990).
+
+    Returns
+    -------
+    dict[str, list[dict]]
+        Dict keyed by team abbreviation, each containing a list of goalie
+        dicts with keys: player_id, name, games_played, save_pct, gaa.
+        Returns empty dict on any failure.
+    """
+    data = _fetch_json(f"{NHL_API_BASE}/gamecenter/{game_id}/landing")
+    if not data:
+        return {}
+
+    matchup = data.get("matchup", {})
+    comparison = matchup.get("goalieComparison", {})
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for side in ("homeTeam", "awayTeam"):
+        team_abbrev = data.get(side, {}).get("abbrev", "")
+        if not team_abbrev:
+            continue
+        leaders = comparison.get(side, {}).get("leaders", [])
+        result[team_abbrev] = [
+            {
+                "player_id": g.get("playerId"),
+                "name": g.get("name", {}).get("default", ""),
+                "games_played": g.get("gamesPlayed", 0),
+                "save_pct": g.get("savePctg", 0.0),
+                "gaa": g.get("gaa", 0.0),
+            }
+            for g in leaders
+        ]
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Standings
 # ---------------------------------------------------------------------------
