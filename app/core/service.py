@@ -11,7 +11,9 @@ from app.logging_config import get_logger
 from app.core.models import MarketSnapshot, TeamMetrics, TrackerConfig
 from app.data.data_sources import fetch_polymarket_odds
 from app.data.dailyfaceoff import fetch_dailyfaceoff_starters
+from app.data.injuries import fetch_injuries
 from app.data.nhl_api import fetch_goalie_stats
+from app.core.injury_impact import build_player_tiers
 from app.math.elo import build_elo_ratings
 
 log = get_logger("service")
@@ -44,7 +46,16 @@ def _fetch_df_starters_safe() -> list[dict]:
         return []
 
 
-def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[dict[str, str]]]:
+def _fetch_injuries_safe() -> list[dict]:
+    """Best-effort injury data -- returns empty list on failure."""
+    try:
+        return fetch_injuries()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Injury fetch failed (non-critical): %s", exc)
+        return []
+
+
+def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[dict[str, str]], list[dict]]:
     """Fetch provider data once and construct reusable modeling inputs.
 
     Returns the snapshot **and** the raw MoneyPuck game rows so that
@@ -55,12 +66,13 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     data_agent = MoneyPuckDataAgent()
     strength_agent = TeamStrengthAgent()
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    with ThreadPoolExecutor(max_workers=6) as pool:
         odds_future = pool.submit(market_agent.run, config)
         moneypuck_future = pool.submit(data_agent.run, config)
         goalie_future = pool.submit(_fetch_goalies_safe)
         polymarket_future = pool.submit(fetch_polymarket_odds)
         df_future = pool.submit(_fetch_df_starters_safe)
+        injury_future = pool.submit(_fetch_injuries_safe)
 
         try:
             odds_events = odds_future.result(timeout=45)
@@ -102,6 +114,13 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     except Exception as exc:  # noqa: BLE001
         log.warning("Polymarket fetch failed: %s", exc)
         poly_events = []
+
+    # Injury data (best-effort -- never blocks on failure)
+    try:
+        injuries = injury_future.result(timeout=15)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Injury future failed: %s", exc)
+        injuries = []
 
     if poly_events:
         # Merge Polymarket as an additional bookmaker on matching events,
@@ -155,7 +174,7 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
         teams_fetched=len(team_strength),
     )
     log.info("Team strength computed for %d teams", len(snapshot.team_strength))
-    return snapshot, games_rows
+    return snapshot, games_rows, injuries
 
 
 def check_circuit_breaker() -> tuple[bool, str]:
@@ -327,6 +346,7 @@ def score_snapshot(
     snapshot: MarketSnapshot,
     config: TrackerConfig,
     games_rows: list[dict[str, str]] | None = None,
+    injuries: list[dict] | None = None,
 ) -> list[dict[str, object]]:
     """Score one config against an already-fetched market snapshot.
 
@@ -385,9 +405,20 @@ def score_snapshot(
         except Exception:
             log.warning("Elo rating build failed — continuing without Elo ensemble")
 
+    # Build injury tiers for teams with active injuries
+    player_tiers = {}
+    if injuries:
+        try:
+            player_tiers = build_player_tiers(injuries)
+        except Exception:
+            log.warning("Injury tier classification failed — continuing without injury adjustments")
+
     edge_agent = EdgeScoringAgent()
     risk_agent = RiskAgent()
-    candidates = edge_agent.run(odds_events, team_strength, config, games_rows, elo_tracker)
+    candidates = edge_agent.run(
+        odds_events, team_strength, config, games_rows, elo_tracker,
+        injuries=injuries, player_tiers=player_tiers,
+    )
     recommendations = risk_agent.run(candidates, config)
     log.info(
         "Scoring complete: %d candidates -> %d recommendations",
@@ -406,8 +437,8 @@ def run_tracker(config: TrackerConfig) -> list[dict[str, object]]:
     - risk-agent produces bankroll-aware stake sizes
     - (optional) persist predictions to SQLite
     """
-    snapshot, games_rows = build_market_snapshot(config)
-    recommendations = score_snapshot(snapshot, config, games_rows)
+    snapshot, games_rows, injuries = build_market_snapshot(config)
+    recommendations = score_snapshot(snapshot, config, games_rows, injuries)
 
     # Phase 4: persist predictions when configured
     if config.persist and recommendations:

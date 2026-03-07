@@ -572,6 +572,7 @@ class EdgeScoringAgent:
         strength: dict[str, TeamMetrics],
         sit_adj: float = 0.0,
         goalie_adj: float = 0.0,
+        injury_adj: float = 0.0,
         home_advantage: float = 0.14,
         logistic_k: float = 0.9,
         elo_tracker: EloTracker | None = None,
@@ -581,7 +582,8 @@ class EdgeScoringAgent:
 
         *sit_adj* is a situational probability adjustment (rest, travel).
         *goalie_adj* is a goalie matchup adjustment (save% differential).
-        Both are applied as probability deltas from the home team's perspective.
+        *injury_adj* is an injury impact adjustment (already in probability units).
+        All are applied as probability deltas from the home team's perspective.
         *elo_tracker* if provided, blends Elo probability with logistic model.
         """
         home_metrics = strength.get(home_team)
@@ -610,9 +612,10 @@ class EdgeScoringAgent:
         if home_metrics.composite_5g != 0.0 or away_metrics.composite_5g != 0.0:
             momentum_adj = (home_metrics.momentum - away_metrics.momentum) * 0.02
 
-        # Apply situational + goalie + momentum adjustments
+        # Apply situational + goalie + momentum + injury adjustments
         # goalie_adj is in percentage points (e.g. 3.0 = 3pp), convert to probability
-        total_adj = sit_adj + goalie_adj / 100.0 + momentum_adj
+        # injury_adj is already in probability units (pp/100 from calculate_injury_adjustment)
+        total_adj = sit_adj + goalie_adj / 100.0 + momentum_adj + injury_adj
         home_prob = max(0.01, min(0.99, home_prob + total_adj))
         away_prob = 1.0 - home_prob
 
@@ -628,6 +631,8 @@ class EdgeScoringAgent:
         config: TrackerConfig,
         games_rows: list[dict[str, str]] | None = None,
         elo_tracker: EloTracker | None = None,
+        injuries: list[dict] | None = None,
+        player_tiers: dict | None = None,
     ) -> list[ValueCandidate]:
         candidates: list[ValueCandidate] = []
         for event in odds_events:
@@ -656,9 +661,20 @@ class EdgeScoringAgent:
                     config.goalie_impact,
                 )
 
+            # Injury adjustment
+            inj_adj = 0.0
+            if injuries and player_tiers:
+                from app.core.injury_impact import calculate_injury_adjustment
+                inj_adj, game_injured_players = calculate_injury_adjustment(
+                    home_team, away_team, injuries, player_tiers,
+                )
+                if game_injured_players:
+                    event["_injuries"] = game_injured_players
+
             home_prob_model, away_prob_model, conf = (
                 self._estimate_win_probability(
                     home_team, away_team, team_strength, sit_adj, g_adj,
+                    injury_adj=inj_adj,
                     home_advantage=config.home_advantage,
                     logistic_k=config.logistic_k,
                     elo_tracker=elo_tracker,

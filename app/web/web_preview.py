@@ -505,8 +505,8 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
         log.debug("Cache hit for %s", cache_key)
         snapshot, games_rows, recommendations = cached
     else:
-        snapshot, games_rows = build_market_snapshot(config)
-        recommendations = score_snapshot(snapshot, config, games_rows)
+        snapshot, games_rows, injuries = build_market_snapshot(config)
+        recommendations = score_snapshot(snapshot, config, games_rows, injuries)
         _snapshot_cache.set(cache_key, (snapshot, games_rows, recommendations))
     strength = snapshot.team_strength
 
