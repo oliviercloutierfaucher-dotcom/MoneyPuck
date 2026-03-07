@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from app.core.agents import TeamStrengthAgent
+from app.core.agents import EdgeScoringAgent, TeamStrengthAgent
 from app.core.models import TeamMetrics
 
 
@@ -183,3 +183,97 @@ def test_unconfirmed_status_falls_back_to_gp_leader():
     # Unconfirmed -> should fall back to GP-leader
     assert result["BOS"].starter_source == "gp_leader"
     assert abs(result["BOS"].starter_save_pct - 0.915) < 0.001  # Swayman (GP leader)
+
+
+# ---- Tests: injury adjustment in EdgeScoringAgent ----
+
+class TestInjuryAdjustment:
+    """Test injury_adj integration in EdgeScoringAgent."""
+
+    def _build_strength(self):
+        """Build minimal team strength dict for BOS and NYR."""
+        rows = _build_game_rows()
+        agent = TeamStrengthAgent()
+        return agent.run(rows, goalie_stats=GOALIE_STATS, confirmed_starters=[])
+
+    def test_injury_adj_positive_shifts_home_probability(self):
+        """Positive injury_adj (away more hurt) increases home_prob."""
+        strength = self._build_strength()
+        base_hp, base_ap, _ = EdgeScoringAgent._estimate_win_probability(
+            "BOS", "NYR", strength, injury_adj=0.0,
+        )
+        adj_hp, adj_ap, _ = EdgeScoringAgent._estimate_win_probability(
+            "BOS", "NYR", strength, injury_adj=0.03,  # 3pp in probability units
+        )
+        assert adj_hp > base_hp
+        assert adj_ap < base_ap
+
+    def test_injury_adj_zero_no_change(self):
+        """injury_adj=0.0 produces same result as without it."""
+        strength = self._build_strength()
+        hp1, ap1, c1 = EdgeScoringAgent._estimate_win_probability(
+            "BOS", "NYR", strength,
+        )
+        hp2, ap2, c2 = EdgeScoringAgent._estimate_win_probability(
+            "BOS", "NYR", strength, injury_adj=0.0,
+        )
+        assert hp1 == hp2
+        assert ap1 == ap2
+
+    def test_injury_adj_in_run_method(self):
+        """EdgeScoringAgent.run() applies injury adjustment when injuries provided."""
+        from unittest.mock import patch as _patch
+        from app.core.models import TrackerConfig
+
+        strength = self._build_strength()
+        config = TrackerConfig(
+            odds_api_key="test",
+            season=2025,
+            min_edge=0.0,
+            min_ev=-999.0,
+            max_edge=50.0,
+        )
+        odds_events = [{
+            "home_team": "BOS",
+            "away_team": "NYR",
+            "commence_time": "2026-03-07T00:00:00Z",
+            "bookmakers": [{
+                "title": "TestBook",
+                "key": "testbook",
+                "markets": [{
+                    "key": "h2h",
+                    "outcomes": [
+                        {"name": "BOS", "price": -110},
+                        {"name": "NYR", "price": +100},
+                    ],
+                }],
+            }],
+        }]
+
+        # Mock injuries: NYR has a top-6 forward out
+        injuries = [
+            {"team": "NYR", "player_name": "Artemi Panarin", "position": "L", "status": "Out"},
+        ]
+        player_tiers = {("NYR", "Artemi Panarin"): "top6_f"}
+
+        # Run with injuries
+        agent = EdgeScoringAgent()
+        candidates_with = agent.run(
+            odds_events, strength, config, injuries=injuries, player_tiers=player_tiers,
+        )
+
+        # Run without injuries
+        candidates_without = agent.run(
+            odds_events, strength, config,
+        )
+
+        # Both should produce candidates (we set min_edge=0)
+        assert len(candidates_with) > 0
+        assert len(candidates_without) > 0
+
+        # With NYR injured, BOS home prob should be higher, so BOS model_probability
+        # should differ between the two runs
+        bos_with = [c for c in candidates_with if c.side == "BOS"]
+        bos_without = [c for c in candidates_without if c.side == "BOS"]
+        if bos_with and bos_without:
+            assert bos_with[0].model_probability != bos_without[0].model_probability
