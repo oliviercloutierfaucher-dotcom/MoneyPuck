@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-06T22:52:22.395Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-07T05:31:46.179Z"
 progress:
   total_phases: 11
   completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
 ---
 
 ---
@@ -52,12 +52,14 @@ progress:
 - Cache bypass via ?refresh=1 query param
 - [Phase 02]: Single CI job, no matrix -- 466 tests in 11s
 - [Phase 02]: Test deps in requirements.txt (no separate dev file)
+- [Phase 03]: Historical team codes via era boundaries (ARI->UTA 2024, SEA 2021, VGK 2017)
+- [Phase 03]: Elo carry-over via optional elo_tracker param with incremental game updates
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Phase 3 context gathered
+- **Stopped at:** Completed 03-01-PLAN.md
 - **Timestamp:** 2026-03-06T23:00:00Z
 
 ---
