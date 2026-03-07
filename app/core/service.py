@@ -10,6 +10,7 @@ from app.core.agents import EdgeScoringAgent, MarketOddsAgent, MoneyPuckDataAgen
 from app.logging_config import get_logger
 from app.core.models import MarketSnapshot, TeamMetrics, TrackerConfig
 from app.data.data_sources import fetch_polymarket_odds
+from app.data.dailyfaceoff import fetch_dailyfaceoff_starters
 from app.data.nhl_api import fetch_goalie_stats
 from app.math.elo import build_elo_ratings
 
@@ -32,6 +33,17 @@ def _fetch_goalies_safe() -> list[dict]:
         return []
 
 
+def _fetch_df_starters_safe() -> list[dict]:
+    """Best-effort DailyFaceoff confirmed starters -- returns empty list on failure."""
+    try:
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        return fetch_dailyfaceoff_starters(today)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("DailyFaceoff fetch failed (non-critical, using GP-leader fallback): %s", exc)
+        return []
+
+
 def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[dict[str, str]]]:
     """Fetch provider data once and construct reusable modeling inputs.
 
@@ -43,11 +55,12 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
     data_agent = MoneyPuckDataAgent()
     strength_agent = TeamStrengthAgent()
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=5) as pool:
         odds_future = pool.submit(market_agent.run, config)
         moneypuck_future = pool.submit(data_agent.run, config)
         goalie_future = pool.submit(_fetch_goalies_safe)
         polymarket_future = pool.submit(fetch_polymarket_odds)
+        df_future = pool.submit(_fetch_df_starters_safe)
 
         try:
             odds_events = odds_future.result(timeout=45)
@@ -75,6 +88,13 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
         except Exception as exc:  # noqa: BLE001
             log.error("Goalie stats fetch failed: %s", exc)
             goalie_stats = []
+
+    # Confirmed starters (best-effort — triggers GP-leader fallback on failure)
+    try:
+        confirmed_starters = df_future.result(timeout=15)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("DailyFaceoff future failed: %s", exc)
+        confirmed_starters = []
 
     # Merge Polymarket odds (best-effort — never blocks on failure)
     try:
@@ -123,7 +143,7 @@ def build_market_snapshot(config: TrackerConfig) -> tuple[MarketSnapshot, list[d
         odds_source, strength_source,
     )
 
-    team_strength = strength_agent.run(games_rows, config, goalie_stats)
+    team_strength = strength_agent.run(games_rows, config, goalie_stats, confirmed_starters)
 
     snapshot = MarketSnapshot(
         odds_events=odds_events,

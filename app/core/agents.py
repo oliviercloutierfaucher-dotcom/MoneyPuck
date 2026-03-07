@@ -56,6 +56,7 @@ from app.math.math_utils import (
     regress_to_mean,
 )
 from app.core.models import TeamMetrics, TrackerConfig, ValueCandidate
+from app.data.goalie_resolver import resolve_all_starters
 from app.data.nhl_api import fetch_goalie_stats, infer_likely_starter
 from app.math.elo import EloTracker, build_elo_ratings
 from app.math.situational import situational_adjustments
@@ -104,6 +105,7 @@ class TeamStrengthAgent:
         games_rows: list[dict[str, str]],
         config: TrackerConfig | None = None,
         goalie_stats: list[dict[str, Any]] | None = None,
+        confirmed_starters: list[dict[str, Any]] | None = None,
     ) -> dict[str, TeamMetrics]:
         # Read tunable params from config (fall back to class defaults)
         half_life = config.half_life if config else self.HALF_LIFE
@@ -186,12 +188,17 @@ class TeamStrengthAgent:
 
         # ---- 5. Regression to mean & composite ----
         # Build goalie lookup: team_code -> starter dict
+        # Use confirmed starters from DailyFaceoff when available,
+        # falling back to GP-leader heuristic
+        df_starters = confirmed_starters if confirmed_starters is not None else []
         goalie_lookup: dict[str, dict[str, Any]] = {}
+        goalie_sources: dict[str, str] = {}
         if goalie_stats:
-            for team in teams:
-                starter = infer_likely_starter(team, goalie_stats)
+            resolved = resolve_all_starters(teams, df_starters, goalie_stats)
+            for team_code, (starter, source) in resolved.items():
                 if starter:
-                    goalie_lookup[team] = starter
+                    goalie_lookup[team_code] = starter
+                    goalie_sources[team_code] = source
 
         result: dict[str, TeamMetrics] = {}
         for team in teams:
@@ -250,6 +257,7 @@ class TeamStrengthAgent:
                 momentum=roll.get("momentum", 0.0),
                 starter_save_pct=s_save_pct,
                 starter_gaa=s_gaa,
+                starter_source=goalie_sources.get(team, "gp_leader"),
             )
 
         return result

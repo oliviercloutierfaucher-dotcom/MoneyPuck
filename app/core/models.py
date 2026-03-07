@@ -45,6 +45,7 @@ class TeamMetrics:
     # Goalie enrichment
     starter_save_pct: float = 0.0
     starter_gaa: float = 0.0
+    starter_source: str = "gp_leader"  # "confirmed", "likely", or "gp_leader"
 
 
 @dataclass(frozen=True)

@@ -633,6 +633,15 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             except Exception as exc:
                 log.debug("Props fetch skipped for %s @ %s: %s", away, home, exc)
 
+        # Starter source labeling (confirmed/likely/gp_leader)
+        home_starter_source = "unknown"
+        away_starter_source = "unknown"
+        if not use_demo_strength:
+            if home_m:
+                home_starter_source = getattr(home_m, "starter_source", "gp_leader")
+            if away_m:
+                away_starter_source = getattr(away_m, "starter_source", "gp_leader")
+
         games.append({
             "home": home,
             "away": away,
@@ -643,6 +652,8 @@ def _build_live_dashboard(params: dict[str, list[str]]) -> dict:
             "game_id": gid,
             "props": game_props,
             "prop_edges": game_prop_edges,
+            "home_starter_source": home_starter_source,
+            "away_starter_source": away_starter_source,
         })
 
     # Rebuild value bets using demo strength if needed
