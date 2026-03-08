@@ -189,12 +189,20 @@ Plans:
 
 **Requirements:** R6.1, R6.2, R6.3, R6.4, R6.5
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Cron endpoints (settle/refresh) with CRON_SECRET auth, health check, cron logging
+- [ ] 08-02-PLAN.md — Disk-based odds cache, quiet hours, API call counter, cron service Dockerfile
+
 **Approach:**
-- Create `app/cron/runner.py` with --task flag
-- Railway cron service: settle at 10:30 UTC, refresh at 16:00 UTC
-- /health endpoint checking data freshness + last settlement time
-- Add Odds API response caching (in-memory or Redis)
-- Log alerts when data sources return errors
+- Railway cron service hits POST /api/cron/settle and /api/cron/refresh endpoints
+- Endpoints secured with CRON_SECRET Bearer token
+- Settlement: daily at 10:30 UTC, model refresh: daily at 16:00 UTC
+- /health endpoint with healthy/degraded/unhealthy status and data freshness
+- Disk-based odds cache fallback, quiet hours (6-14 UTC), API call counter
+- Cron results logged to SQLite cron_log table
+- Polymarket 422 errors silenced
 
 **Success:** Settlement runs automatically for 2 weeks.
 
