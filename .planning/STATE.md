@@ -32,7 +32,7 @@ progress:
 **Milestone 1: Production-Ready Platform**
 
 ## Current Phase
-**Phase 6: FastAPI Migration** — Complete (2/2 plans)
+**Phase 7: Dashboard Rebuild** — In Progress (1/? plans)
 
 ## Completed Phases
 - **Phase 1: Persistent Storage** — Complete (2026-03-06)
@@ -53,6 +53,10 @@ progress:
   - FastAPI app with all routes, Jinja2 template, security middleware
   - Dockerfile updated to uvicorn, old stdlib server deleted
   - 575 tests passing
+
+- **Phase 7: Dashboard Rebuild** — In Progress (2026-03-08)
+  - HTMX tab shell with 5 partials, dual-mode route handlers
+  - 607 tests passing
 
 ## Key Context
 - CI/CD pipeline active: GitHub Actions + Railway "Wait for CI" (Phase 2 complete)
@@ -89,12 +93,17 @@ progress:
 - [Phase 06]: Dockerfile CMD uses shell form for PORT env var interpolation
 - [Phase 06]: Old web_preview.py fully deleted -- all logic lives in app.web.app
 
+- [Phase 07]: HTMX via CDN (no npm/build step) for tab navigation with hx-push-url
+- [Phase 07]: Dual-mode route pattern: _tab_response() checks HX-Request header
+- [Phase 07]: Games partial carries all existing client-side JS for backward compatibility
+- [Phase 07]: window.__MP_DATA provides global data access for cross-partial JS
+
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Completed 06-02-PLAN.md
-- **Timestamp:** 2026-03-08T00:10:00Z
+- **Stopped at:** Completed 07-01-PLAN.md
+- **Timestamp:** 2026-03-08T00:55:00Z
 
 ## Performance Metrics
 
@@ -102,6 +111,7 @@ progress:
 |-----------|----------|-------|-------|
 | 06-01     | 6m32s    | 2     | 3     |
 | 06-02     | 4min     | 2     | 8     |
+| 07-01     | 10min    | 2     | 10    |
 
 ---
 *Last updated: 2026-03-08*

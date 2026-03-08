@@ -10,7 +10,7 @@
 | 4 | 2/2 | Complete   | 2026-03-07 | Yes (with 5) |
 | 5 | Injury Impact System | R4 | P1 — second-highest impact | Yes (with 4) |
 | 6 | FastAPI Migration | R5.1-R5.2 | P1 — backend swap | No (breaks web layer) |
-| 7 | Dashboard Rebuild | R5.3-R5.7 | P1 — professional UI | No (depends on 6) |
+| 7 | 1/3 | In Progress|  | No (depends on 6) |
 | 8 | Automated Operations | R6 | P1 — reliability | No (depends on 1, 6) |
 | 9 | Live Performance Tracking | R7 | P2 — proof of results | No (depends on 1, 8) |
 | 10 | User Auth & Payments | R9 | P2 — monetization | No (depends on 6) |
@@ -161,7 +161,7 @@ Plans:
 
 **Requirements:** R5.3, R5.4, R5.5, R5.6, R5.7
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 07-01-PLAN.md — Template decomposition (shell + 5 partials + macros), HTMX tab nav, dual-mode route handlers, routing tests
