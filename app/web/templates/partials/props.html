@@ -1,11 +1,61 @@
-{# Player Props tab partial -- stub for Plan 02-03 migration.
-   Currently shows placeholder; props shown per-game in modal. #}
-{% from "macros/cards.html" import stat_pill %}
+{# Player Props tab partial -- Server-rendered player prop comparisons
+   aggregated from all games. Shows best over/under odds per player+market. #}
 
 <div class="section-title">Player Props</div>
+
+{% set all_props = [] %}
+{% for game in data.games %}
+  {% if game.props %}
+    {% for prop in game.props %}
+      {% if all_props.append({"player": prop.player_name, "market": prop.market_label, "line": prop.line, "over_odds": prop.best_over_odds, "over_book": prop.best_over_book, "under_odds": prop.best_under_odds, "under_book": prop.best_under_book, "spread": prop.book_spread, "home": game.home, "away": game.away}) %}{% endif %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+
+{% if not all_props %}
 <div class="empty" style="padding:48px 20px">
   <div class="icon" style="font-size:36px;opacity:0.4">&#127944;</div>
-  <h3>Player Props</h3>
-  <p>Player prop comparisons are shown per-game in the game detail modal on the Games tab.</p>
-  <p style="margin-top:8px;font-size:11px;color:var(--muted)">Dedicated props view coming in a future update.</p>
+  <h3>No Player Prop Edges Found</h3>
+  <p>Player prop comparisons will appear here when games are available.</p>
 </div>
+{% else %}
+<div style="overflow-x:auto">
+  <table class="props-table" style="width:100%;border-collapse:collapse;margin-top:12px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border-2)">
+        <th style="text-align:left;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Player</th>
+        <th style="text-align:left;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Game</th>
+        <th style="text-align:left;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Market</th>
+        <th style="text-align:center;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Line</th>
+        <th style="text-align:center;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Best Over</th>
+        <th style="text-align:center;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Best Under</th>
+        <th style="text-align:center;padding:8px 10px;color:var(--text-2);font-size:11px;font-weight:600;text-transform:uppercase">Spread</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for prop in all_props %}
+      <tr style="border-bottom:1px solid var(--border);transition:background 0.15s" onmouseover="this.style.background='var(--panel-2)'" onmouseout="this.style.background=''">
+        <td style="padding:8px 10px;font-weight:600">{{ prop.player }}</td>
+        <td style="padding:8px 10px;color:var(--text-2);font-size:12px">{{ prop.away }} @ {{ prop.home }}</td>
+        <td style="padding:8px 10px">{{ prop.market }}</td>
+        <td style="padding:8px 10px;text-align:center;font-weight:600">{{ prop.line }}</td>
+        <td style="padding:8px 10px;text-align:center">
+          <span style="color:var(--green);font-weight:600">{{ "%+d"|format(prop.over_odds) }}</span>
+          <span style="display:block;font-size:10px;color:var(--muted)">{{ prop.over_book }}</span>
+        </td>
+        <td style="padding:8px 10px;text-align:center">
+          <span style="color:var(--accent);font-weight:600">{{ "%+d"|format(prop.under_odds) }}</span>
+          <span style="display:block;font-size:10px;color:var(--muted)">{{ prop.under_book }}</span>
+        </td>
+        <td style="padding:8px 10px;text-align:center;font-weight:600;color:{{ 'var(--green)' if prop.spread < 5 else 'var(--amber)' if prop.spread < 10 else 'var(--red)' }}">
+          {{ "%.1f"|format(prop.spread) }}%
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:8px;font-size:11px;color:var(--muted)">
+  {{ all_props|length }} prop comparison{{ 's' if all_props|length != 1 else '' }} across {{ data.games|length }} game{{ 's' if data.games|length != 1 else '' }}
+</div>
+{% endif %}

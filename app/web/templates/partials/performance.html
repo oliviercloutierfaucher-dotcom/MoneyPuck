@@ -1,157 +1,145 @@
-{# Performance tab partial -- Performance tracker with KPIs, bar chart,
-   by-book table, and recent bets. Self-contained HTML fragment. #}
-{% from "macros/cards.html" import stat_pill %}
+{# Performance tab partial -- Server-rendered performance dashboard with
+   KPIs, Chart.js bar chart, by-book table, and recent bets. #}
 
 <div class="perf-section" id="perf-section">
   <div class="section-title">Performance Tracker</div>
-  <div class="perf-empty" id="perf-placeholder">Loading performance data...</div>
-  <div id="perf-content" style="display:none">
-    <!-- KPI strip -->
-    <div class="kpi-strip" style="margin-bottom:12px" id="perf-kpis"></div>
-    <!-- Bar chart -->
-    <div class="perf-chart-wrap" id="perf-chart-wrap">
-      <div class="perf-chart-title">Monthly P&amp;L ($)</div>
-      <div class="perf-bar-chart" id="perf-bar-chart"></div>
+
+  {% if perf_data.settled_bets == 0 and not perf_data.get("_demo") %}
+  <div class="empty" style="padding:48px 20px">
+    <div class="icon" style="font-size:36px;opacity:0.4">&#128200;</div>
+    <h3>No Tracking Data Yet</h3>
+    <p>Bets will appear here once recorded and settled.</p>
+  </div>
+  {% else %}
+
+  {# KPI Strip #}
+  <div class="kpi-strip" style="margin-bottom:12px">
+    <div class="kpi {{ 'green' if perf_data.win_rate >= 0.5 else '' }}">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value">{{ "%.1f"|format(perf_data.win_rate * 100) }}%</div>
+      <div class="kpi-sub">{{ perf_data.wins }}W / {{ perf_data.losses }}L</div>
     </div>
-    <!-- Two-column: book table + recent bets -->
-    <div class="perf-two-col">
-      <div>
-        <div class="section-title" style="margin-bottom:8px">By Sportsbook</div>
-        <div class="perf-book-table-wrap">
-          <table class="perf-book-table">
-            <thead><tr><th>Book</th><th>Bets</th><th>P&amp;L</th><th>ROI%</th></tr></thead>
-            <tbody id="perf-book-body"></tbody>
-          </table>
-        </div>
+    <div class="kpi {{ 'green' if perf_data.roi_pct >= 0 else '' }}">
+      <div class="kpi-label">ROI</div>
+      <div class="kpi-value" style="color:{{ 'var(--green)' if perf_data.roi_pct >= 0 else 'var(--red)' }}">
+        {{ '+' if perf_data.roi_pct >= 0 else '' }}{{ "%.1f"|format(perf_data.roi_pct) }}%
       </div>
-      <div>
-        <div class="section-title" style="margin-bottom:8px">Recent Settled Bets</div>
-        <div class="perf-recent-wrap">
-          <ul class="perf-recent-list" id="perf-recent-list"></ul>
-        </div>
+      <div class="kpi-sub">on {{ perf_data.settled_bets }} settled</div>
+    </div>
+    <div class="kpi {{ 'green' if perf_data.net_profit >= 0 else '' }}">
+      <div class="kpi-label">Net P&amp;L</div>
+      <div class="kpi-value" style="color:{{ 'var(--green)' if perf_data.net_profit >= 0 else 'var(--red)' }}">
+        {{ '+' if perf_data.net_profit >= 0 else '' }}${{ "%.2f"|format(perf_data.net_profit|abs) }}
+      </div>
+      <div class="kpi-sub">staked ${{ "%.2f"|format(perf_data.total_staked) }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Bets</div>
+      <div class="kpi-value">{{ perf_data.total_bets }}</div>
+      <div class="kpi-sub">{{ perf_data.pending_bets }} pending</div>
+    </div>
+  </div>
+
+  {# Chart.js Monthly P&L Bar Chart #}
+  {% if perf_data.by_month %}
+  <div class="perf-chart-wrap">
+    <div class="perf-chart-title">Monthly P&amp;L ($)</div>
+    <div style="position:relative;height:220px">
+      <canvas id="pl-chart"></canvas>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var ctx = document.getElementById('pl-chart');
+    if (!ctx) return;
+    var months = {{ perf_data.by_month | tojson }};
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: months.map(function(m) { return m.month; }),
+        datasets: [{
+          data: months.map(function(m) { return m.profit; }),
+          backgroundColor: months.map(function(m) {
+            return m.profit >= 0 ? 'rgba(16,185,129,0.7)' : 'rgba(239,68,68,0.7)';
+          }),
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            grid: { color: 'rgba(51,65,85,0.3)' },
+            ticks: { color: '#94a3b8' }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#94a3b8' }
+          }
+        }
+      }
+    });
+  })();
+  </script>
+  {% endif %}
+
+  {# Two-column: book table + recent bets #}
+  <div class="perf-two-col">
+    <div>
+      <div class="section-title" style="margin-bottom:8px">By Sportsbook</div>
+      <div class="perf-book-table-wrap">
+        <table class="perf-book-table">
+          <thead><tr><th>Book</th><th>Bets</th><th>P&amp;L</th><th>ROI%</th></tr></thead>
+          <tbody>
+            {% for book in perf_data.by_book %}
+            <tr>
+              <td style="font-weight:600">{{ book.book }}</td>
+              <td>{{ book.bets }}</td>
+              <td class="perf-profit {{ 'pos' if book.profit >= 0 else 'neg' }}">
+                {{ '+' if book.profit >= 0 else '' }}${{ "%.2f"|format(book.profit|abs) }}
+              </td>
+              <td style="color:{{ 'var(--green)' if book.roi >= 0 else 'var(--red)' }};font-weight:700">
+                {{ '+' if book.roi >= 0 else '' }}{{ "%.1f"|format(book.roi) }}%
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="color:var(--muted);padding:12px">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div class="section-title" style="margin-bottom:8px">Recent Settled Bets</div>
+      <div class="perf-recent-wrap">
+        <ul class="perf-recent-list">
+          {% for bet in perf_data.recent_bets %}
+          <li class="perf-recent-item">
+            <span class="perf-result-badge {{ 'win' if bet.result == 'win' else 'loss' }}">
+              {{ 'W' if bet.result == 'win' else 'L' }}
+            </span>
+            <span>
+              <strong>{{ bet.side }}</strong>
+              <span style="color:var(--muted);font-size:11px"> &mdash; {{ bet.game }}</span>
+            </span>
+            <span class="perf-recent-meta">
+              <span style="color:var(--text-2)">{{ "%.2f"|format(bet.odds) }}</span>
+              &nbsp;&middot;&nbsp;${{ "%.2f"|format(bet.stake) }}
+              &nbsp;&middot;&nbsp;<span class="perf-profit {{ 'pos' if bet.profit >= 0 else 'neg' }}">
+                {{ '+' if bet.profit >= 0 else '' }}${{ "%.2f"|format(bet.profit|abs) }}
+              </span>
+            </span>
+          </li>
+          {% else %}
+          <li class="perf-recent-item" style="color:var(--muted)">No settled bets yet</li>
+          {% endfor %}
+        </ul>
       </div>
     </div>
   </div>
+
+  {% endif %}
 </div>
-
-<script>
-/* ---- Performance Tab JS (self-contained) ---- */
-(function() {
-  function fmt$(v) { return (v >= 0 ? '+' : '') + '$' + Math.abs(v).toFixed(2); }
-  function roiColor(r) { return r >= 0 ? 'var(--green)' : 'var(--red)'; }
-
-  function renderPerf(d) {
-    document.getElementById('perf-placeholder').style.display = 'none';
-    document.getElementById('perf-content').style.display = '';
-
-    const winRatePct = (d.win_rate * 100).toFixed(1);
-    const roi = d.roi_pct;
-    const netPl = d.net_profit;
-    const plSign = netPl >= 0 ? '+' : '';
-    document.getElementById('perf-kpis').innerHTML = `
-      <div class="kpi ${d.win_rate >= 0.5 ? 'green' : ''}">
-        <div class="kpi-label">Win Rate</div>
-        <div class="kpi-value">${winRatePct}%</div>
-        <div class="kpi-sub">${d.wins}W / ${d.losses}L</div>
-      </div>
-      <div class="kpi ${roi >= 0 ? 'green' : ''}">
-        <div class="kpi-label">ROI</div>
-        <div class="kpi-value" style="color:${roiColor(roi)}">${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%</div>
-        <div class="kpi-sub">on ${d.settled_bets} settled</div>
-      </div>
-      <div class="kpi ${netPl >= 0 ? 'green' : ''}">
-        <div class="kpi-label">Net P&amp;L</div>
-        <div class="kpi-value" style="color:${roiColor(netPl)}">${plSign}$${Math.abs(netPl).toFixed(2)}</div>
-        <div class="kpi-sub">staked $${d.total_staked.toFixed(2)}</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Total Bets</div>
-        <div class="kpi-value">${d.total_bets}</div>
-        <div class="kpi-sub">${d.pending_bets} pending</div>
-      </div>
-    `;
-
-    const months = d.by_month || [];
-    if (months.length) {
-      const maxAbs = Math.max(1, ...months.map(m => Math.abs(m.profit)));
-      const chartHeight = 80;
-      const chart = document.getElementById('perf-bar-chart');
-      chart.innerHTML = months.map(m => {
-        const h = Math.max(3, (Math.abs(m.profit) / maxAbs) * chartHeight);
-        const pos = m.profit >= 0;
-        return `<div class="perf-bar-col">
-          <div class="perf-bar-value" style="color:${roiColor(m.profit)}">${fmt$(m.profit)}</div>
-          <div class="perf-bar ${pos ? 'positive' : 'negative'}" style="height:${h}px" title="${m.month}: ${fmt$(m.profit)} (${m.roi}% ROI)"></div>
-          <div class="perf-bar-label">${m.month.slice(5)}</div>
-        </div>`;
-      }).join('');
-    } else {
-      document.getElementById('perf-chart-wrap').style.display = 'none';
-    }
-
-    const books = d.by_book || [];
-    const bookBody = document.getElementById('perf-book-body');
-    if (books.length) {
-      bookBody.innerHTML = books.map(b => {
-        const plCls = b.profit >= 0 ? 'pos' : 'neg';
-        return `<tr>
-          <td style="font-weight:600">${esc(b.book)}</td>
-          <td>${b.bets}</td>
-          <td class="perf-profit ${plCls}">${fmt$(b.profit)}</td>
-          <td style="color:${roiColor(b.roi)};font-weight:700">${b.roi >= 0 ? '+' : ''}${b.roi.toFixed(1)}%</td>
-        </tr>`;
-      }).join('');
-    } else {
-      bookBody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);padding:12px">No data</td></tr>';
-    }
-
-    const recent = d.recent_bets || [];
-    const list = document.getElementById('perf-recent-list');
-    if (recent.length) {
-      list.innerHTML = recent.map(b => {
-        const isWin = b.result === 'win';
-        const resultLabel = isWin ? 'W' : 'L';
-        const plCls = b.profit >= 0 ? 'pos' : 'neg';
-        return `<li class="perf-recent-item">
-          <span class="perf-result-badge ${isWin ? 'win' : 'loss'}">${resultLabel}</span>
-          <span>
-            <strong>${esc(b.side)}</strong>
-            <span style="color:var(--muted);font-size:11px"> &mdash; ${esc(b.game)}</span>
-          </span>
-          <span class="perf-recent-meta">
-            <span style="color:var(--text-2)">${b.odds.toFixed(2)}</span>
-            &nbsp;&middot;&nbsp;$${b.stake.toFixed(2)}
-            &nbsp;&middot;&nbsp;<span class="perf-profit ${plCls}">${fmt$(b.profit)}</span>
-          </span>
-        </li>`;
-      }).join('');
-    } else {
-      list.innerHTML = '<li class="perf-recent-item" style="color:var(--muted)">No settled bets yet</li>';
-    }
-  }
-
-  function showPerfError(msg) {
-    const ph = document.getElementById('perf-placeholder');
-    ph.style.display = '';
-    ph.textContent = msg || 'No tracking data yet. Bets will appear here once recorded.';
-    document.getElementById('perf-content').style.display = 'none';
-  }
-
-  async function loadPerf() {
-    try {
-      const res = await fetch('/api/performance');
-      if (!res.ok) { showPerfError('Performance data unavailable.'); return; }
-      const d = await res.json();
-      if (d.settled_bets === 0 && !d._demo) {
-        showPerfError('No tracking data yet. Bets will appear here once recorded.');
-        return;
-      }
-      renderPerf(d);
-    } catch(e) {
-      showPerfError('No tracking data yet. Bets will appear here once recorded.');
-    }
-  }
-
-  loadPerf();
-})();
-</script>
