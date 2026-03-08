@@ -1,10 +1,15 @@
 {# Games tab partial -- Tonight's Games with controls, KPI strip,
    book chips, game cards grid, plays, arbs, value bets table, CLV,
-   and bankroll meter. Self-contained HTML fragment. #}
-{% from "macros/cards.html" import game_card, stat_pill %}
+   and bankroll meter. Server-side rendered via Jinja2 macros. #}
+{% from "macros/cards.html" import game_card, stat_pill, value_bet_row, arb_card %}
 
-<div hx-get="/games?demo={{ data.mode }}&region={{ data.config.region|default('qc') }}&bankroll={{ data.config.bankroll|default(1000) }}&min_edge={{ data.config.min_edge|default(2.0) }}&min_ev={{ data.config.min_ev|default(0.02) }}"
-     hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
+{# Pre-compute filtered value bets and arbs from data context #}
+{%- set games = data.games | default([]) -%}
+{%- set value_bets = data.value_bets | default([]) -%}
+{%- set arb_opportunities = data.arb_opportunities | default([]) -%}
+{%- set books = data.books | default([]) -%}
+{%- set summary = data.summary | default({}) -%}
+{%- set mode = data.mode | default('demo') -%}
 
 <!-- CONTROLS -->
 <div class="controls">
@@ -98,31 +103,47 @@
   </div>
 </div>
 
-<!-- BOOK FILTER -->
+<!-- BOOK FILTER (server-rendered chips, JS toggles visibility) -->
 <div class="books-bar" id="books-bar">
   <span class="label">Books</span>
+  {% for book in books %}
+  <div class="book-chip active" role="button" tabindex="0" aria-pressed="true"
+       data-book="{{ book }}">{{ book }}</div>
+  {% endfor %}
 </div>
 
-<!-- KPI STRIP -->
+<!-- KPI STRIP (server-rendered from data) -->
+{%- set avg_edge = 0 -%}
+{%- set best_edge = 0 -%}
+{%- set total_stake = 0 -%}
+{%- if value_bets %}
+  {%- set avg_edge = (value_bets | map(attribute='edge_probability_points') | list | sum) / (value_bets | length) -%}
+  {%- set best_edge = value_bets | map(attribute='edge_probability_points') | list | max -%}
+  {%- set total_stake = value_bets | map(attribute='recommended_stake') | list | sum -%}
+{%- endif %}
+{%- set poly_games = games | selectattr('poly_home_prob', 'defined') | selectattr('poly_home_prob') | list -%}
+{%- set poly_count = poly_games | length -%}
 <div class="kpi-strip">
-  <div class="kpi"><div class="kpi-label">Books</div><div class="kpi-value" id="kpi-books">0</div></div>
-  <div class="kpi"><div class="kpi-label">Games</div><div class="kpi-value" id="kpi-games">0</div></div>
-  <div class="kpi green"><div class="kpi-label">Value Bets</div><div class="kpi-value" id="kpi-bets">0</div></div>
-  <div class="kpi green"><div class="kpi-label">Avg Edge</div><div class="kpi-value" id="kpi-edge">0pp</div></div>
-  <div class="kpi"><div class="kpi-label">Best Edge</div><div class="kpi-value" id="kpi-best">0pp</div></div>
-  <div class="kpi"><div class="kpi-label">Total Stake</div><div class="kpi-value" id="kpi-stake">$0</div></div>
-  <div class="kpi amber"><div class="kpi-label">Polymarket</div><div class="kpi-value" id="kpi-poly">&mdash;</div><div class="kpi-sub" id="kpi-poly-sub">games matched</div></div>
+  <div class="kpi"><div class="kpi-label">Books</div><div class="kpi-value" id="kpi-books">{{ books | length }}</div></div>
+  <div class="kpi"><div class="kpi-label">Games</div><div class="kpi-value" id="kpi-games">{{ games | length }}</div></div>
+  <div class="kpi green"><div class="kpi-label">Value Bets</div><div class="kpi-value" id="kpi-bets">{{ value_bets | length }}</div></div>
+  <div class="kpi green"><div class="kpi-label">Avg Edge</div><div class="kpi-value" id="kpi-edge">+{{ avg_edge | round(2) }}pp</div></div>
+  <div class="kpi"><div class="kpi-label">Best Edge</div><div class="kpi-value" id="kpi-best">+{{ best_edge | round(2) }}pp</div></div>
+  <div class="kpi"><div class="kpi-label">Total Stake</div><div class="kpi-value" id="kpi-stake">${{ total_stake | round(2) }}</div></div>
+  <div class="kpi amber"><div class="kpi-label">Polymarket</div><div class="kpi-value" id="kpi-poly">{% if poly_count > 0 %}{{ poly_count }}/{{ games | length }}{% else %}&mdash;{% endif %}</div><div class="kpi-sub" id="kpi-poly-sub">{% if poly_count > 0 %}games matched{% else %}no data{% endif %}</div></div>
 </div>
 
 <!-- BANKROLL METER -->
+{%- set bankroll = 1000 -%}
+{%- set exposure_pct = (total_stake / bankroll * 100) if bankroll > 0 else 0 -%}
 <div class="bankroll-bar">
   <div class="info">
     <div class="label">Bankroll Exposure</div>
-    <div class="amount" id="bankroll-amount">$0 / $1,000</div>
+    <div class="amount" id="bankroll-amount">${{ total_stake | round(0) | int }} / ${{ '{:,}'.format(bankroll | int) }}</div>
   </div>
   <div class="meter">
-    <div class="meter-track"><div class="meter-fill" id="meter-fill" style="width:0%"></div></div>
-    <div class="meter-labels"><span>0%</span><span id="meter-pct">0%</span><span>Cap 15%</span></div>
+    <div class="meter-track"><div class="meter-fill {{ 'warn' if exposure_pct > 15 else '' }}" id="meter-fill" style="width:{{ [exposure_pct, 100] | min }}%"></div></div>
+    <div class="meter-labels"><span>0%</span><span id="meter-pct">{{ exposure_pct | round(1) }}%</span><span>Cap 15%</span></div>
   </div>
 </div>
 
@@ -136,27 +157,86 @@
     </div>
   </div>
   <div class="clv-kpis" id="clv-kpis">
-    <div class="clv-empty">No CLV data yet &mdash; settle predictions to track closing line value</div>
+    {% if data.clv and data.clv.total_bets %}
+      {%- set clv = data.clv -%}
+      {%- set avg_clv = clv.avg_clv_cents | float -%}
+      {%- set pct_beat = clv.pct_beating_close | float -%}
+      {%- set avg_class = 'positive' if avg_clv > 0 else ('negative' if avg_clv < 0 else 'neutral') -%}
+      {%- set beat_class = 'positive' if pct_beat >= 0.55 else ('neutral' if pct_beat >= 0.45 else 'negative') -%}
+      <div class="clv-kpi {{ avg_class }}">
+        <div class="kpi-label">Avg CLV</div>
+        <div class="kpi-value">{{ '+' if avg_clv > 0 else '' }}{{ avg_clv | round(1) }}&cent;</div>
+        <div class="kpi-sub">per bet</div>
+      </div>
+      <div class="clv-kpi {{ beat_class }}">
+        <div class="kpi-label">Beat Close</div>
+        <div class="kpi-value">{{ (pct_beat * 100) | round(1) }}%</div>
+        <div class="kpi-sub">of bets</div>
+      </div>
+      <div class="clv-kpi neutral">
+        <div class="kpi-label">Sample</div>
+        <div class="kpi-value">{{ clv.total_bets }}</div>
+        <div class="kpi-sub">settled bets</div>
+      </div>
+    {% else %}
+      <div class="clv-empty">No CLV data yet &mdash; settle predictions to track closing line value</div>
+    {% endif %}
   </div>
 </div>
 
-<!-- TODAY'S PLAYS -->
-<div class="section-title" id="plays-title">Today's Plays <span class="count" id="plays-count">0</span></div>
-<div class="plays-grid" id="plays-grid"></div>
+<!-- TODAY'S PLAYS (server-rendered) -->
+<div class="section-title" id="plays-title">Today's Plays <span class="count" id="plays-count">{{ value_bets | length }}</span></div>
+<div class="plays-grid" id="plays-grid">
+  {% if not value_bets %}
+    <div class="empty" style="grid-column:1/-1;padding:24px"><h3>No plays found</h3><p>Adjust thresholds or check back later</p></div>
+  {% else %}
+    {% for bet in value_bets[:8] %}
+    <div class="play-card">
+      <div class="play-rank">#{{ loop.index }}</div>
+      <div class="play-action">BET {{ bet.side }} {{ bet.market | default('ML') }}</div>
+      <div class="play-game">{{ bet.away_team }} @ {{ bet.home_team }}</div>
+      <div class="play-details">
+        <div><div class="detail-label">Book</div><div class="detail-value">{% if bet.sportsbook_url %}<a href="{{ bet.sportsbook_url }}" target="_blank" rel="noopener">{{ bet.sportsbook }}</a>{% else %}{{ bet.sportsbook }}{% endif %}</div></div>
+        <div><div class="detail-label">Odds</div><div class="detail-value">{{ bet.decimal_odds | default(0) }}</div></div>
+        <div><div class="detail-label">Stake</div><div class="detail-value green">${{ bet.recommended_stake | round(2) }}</div></div>
+        <div><div class="detail-label">Edge</div><div class="detail-value green">+{{ bet.edge_probability_points | round(2) }}pp</div></div>
+        <div><div class="detail-label">Model</div><div class="detail-value" style="color:var(--accent)">{{ (bet.model_probability * 100) | round(1) }}%</div></div>
+        <div><div class="detail-label">Street</div><div class="detail-value" style="color:var(--amber)">{{ (bet.implied_probability * 100) | round(1) }}%</div></div>
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+</div>
 
-<!-- ARB ALERTS -->
-<div class="section-title">Arb Alerts <span class="count" id="arb-count">0</span></div>
-<div class="arb-grid" id="arb-grid"></div>
+<!-- ARB ALERTS (server-rendered) -->
+<div class="section-title">Arb Alerts <span class="count" id="arb-count">{{ arb_opportunities | length }}</span></div>
+<div class="arb-grid" id="arb-grid">
+  {% if not arb_opportunities %}
+    <div class="empty" style="grid-column:1/-1;padding:16px"><p>No arbitrage opportunities found</p></div>
+  {% else %}
+    {% for arb in arb_opportunities %}
+      {{ arb_card(arb) }}
+    {% endfor %}
+  {% endif %}
+</div>
 
-<!-- GAMES -->
-<div class="section-title">Tonight's Games <span class="count" id="games-count">0</span></div>
-<div class="games-grid" id="games-grid"></div>
+<!-- GAMES (server-rendered via Jinja2 macros) -->
+<div class="section-title">Tonight's Games <span class="count" id="games-count">{{ games | length }}</span></div>
+<div class="games-grid" id="games-grid">
+  {% if not games %}
+    <div class="empty" style="grid-column:1/-1"><div class="icon">&#127954;</div><h3>No games tonight</h3><p>Check back when games are scheduled</p></div>
+  {% else %}
+    {% for game in games %}
+      {{ game_card(game, loop.index0, value_bets) }}
+    {% endfor %}
+  {% endif %}
+</div>
 
-<!-- VALUE BETS TABLE -->
+<!-- VALUE BETS TABLE (server-rendered) -->
 <div class="value-section">
-  <div class="section-title">Detailed Breakdown <span class="count" id="bets-count">0</span></div>
+  <div class="section-title">Detailed Breakdown <span class="count" id="bets-count">{{ value_bets | length }}</span></div>
   <div class="value-table-wrap">
-    <table class="value-table">
+    <table class="value-table" id="value-table">
       <thead>
         <tr>
           <th onclick="sortBets('game')" data-sort-key="game">#</th>
@@ -172,26 +252,33 @@
           <th onclick="sortBets('recommended_stake')" data-sort-key="recommended_stake">Stake</th>
         </tr>
       </thead>
-      <tbody id="bets-body"></tbody>
+      <tbody id="bets-body">
+        {% if not value_bets %}
+          <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted);">No value bets found at current thresholds</td></tr>
+        {% else %}
+          {% for bet in value_bets %}
+            {{ value_bet_row(bet, loop.index) }}
+          {% endfor %}
+        {% endif %}
+      </tbody>
     </table>
   </div>
 </div>
 
 <script>
-/* ---- Games Tab JS (self-contained) ---- */
+/* ---- Games Tab JS (minimal -- server rendered, JS only for interactivity) ---- */
 (function() {
   const D = window.__MP_DATA || {};
   let activeBooks = new Set((D.books || []).map(b => b));
   let currentData = D;
-  let currentFilteredGames = [];
-  let sortKey = 'edge_probability_points';
-  let sortDesc = true;
+  let currentFilteredGames = D.games || [];
 
   /* Expose to global for cross-partial access */
   window.activeBooks = activeBooks;
   window.currentData = currentData;
   window.currentFilteredGames = currentFilteredGames;
 
+  /* ---- PREFERENCES ---- */
   function savePrefs() {
     try {
       localStorage.setItem('mp_region', document.getElementById('ctl-region').value);
@@ -218,6 +305,11 @@
         const available = new Set(D.books || []);
         activeBooks = new Set(arr.filter(b => available.has(b)));
         window.activeBooks = activeBooks;
+        document.querySelectorAll('.book-chip[data-book]').forEach(chip => {
+          const active = activeBooks.has(chip.dataset.book);
+          chip.classList.toggle('active', active);
+          chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
       }
     } catch(e) {}
   }
@@ -227,216 +319,18 @@
     return now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
   }
 
-  function renderBooks(books) {
-    const bar = document.getElementById('books-bar');
-    bar.innerHTML = '<span class="label">Books</span>';
-    books.forEach(b => {
-      const chip = document.createElement('div');
-      chip.className = 'book-chip' + (activeBooks.has(b) ? ' active' : '');
-      chip.textContent = b;
-      chip.setAttribute('role', 'button');
-      chip.setAttribute('tabindex', '0');
-      chip.setAttribute('aria-pressed', activeBooks.has(b) ? 'true' : 'false');
-      const toggle = () => {
-        if (activeBooks.has(b)) activeBooks.delete(b); else activeBooks.add(b);
-        chip.classList.toggle('active');
-        chip.setAttribute('aria-pressed', activeBooks.has(b) ? 'true' : 'false');
-        render(currentData);
-        savePrefs();
-      };
-      chip.onclick = toggle;
-      chip.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
-      bar.appendChild(chip);
-    });
-  }
-
-  /* ---- CLV TRACKER ---- */
-  function renderClv(clv) {
-    const panel = document.getElementById('clv-panel');
-    const kpisEl = document.getElementById('clv-kpis');
-    if (!clv || !clv.total_bets) {
-      kpisEl.innerHTML = '<div class="clv-empty">No CLV data yet &mdash; settle predictions to track closing line value</div>';
-      panel.className = 'clv-panel';
-      return;
-    }
-
-    const avgClv = Number(clv.avg_clv_cents);
-    const pctBeat = Number(clv.pct_beating_close);
-    const total = clv.total_bets;
-
-    const avgClass = avgClv > 0 ? 'positive' : avgClv < 0 ? 'negative' : 'neutral';
-    const sign = avgClv > 0 ? '+' : '';
-    const beatPct = (pctBeat * 100).toFixed(1);
-    const beatClass = pctBeat >= 0.55 ? 'positive' : pctBeat >= 0.45 ? 'neutral' : 'negative';
-
-    const byBook = clv.clv_by_book || {};
-    const bookEntries = Object.entries(byBook)
-      .sort((a, b) => b[1].total_bets - a[1].total_bets)
-      .slice(0, 4);
-    const bookHtml = bookEntries.map(([book, stats]) => {
-      const bc = Number(stats.avg_clv_cents);
-      const bClass = bc > 0 ? 'positive' : bc < 0 ? 'negative' : 'neutral';
-      const bSign = bc > 0 ? '+' : '';
-      return `<div class="clv-kpi ${bClass}">
-        <div class="kpi-label">${esc(book)}</div>
-        <div class="kpi-value">${bSign}${n(bc, 1)}\u00a2</div>
-        <div class="kpi-sub">${stats.total_bets} bets</div>
-      </div>`;
-    }).join('');
-
-    panel.className = 'clv-panel' + (avgClv > 0 ? ' clv-positive' : avgClv < 0 ? ' clv-negative' : '');
-    kpisEl.innerHTML = `
-      <div class="clv-kpi ${avgClass}">
-        <div class="kpi-label">Avg CLV</div>
-        <div class="kpi-value">${sign}${n(avgClv, 1)}\u00a2</div>
-        <div class="kpi-sub">per bet</div>
-      </div>
-      <div class="clv-kpi ${beatClass}">
-        <div class="kpi-label">Beat Close</div>
-        <div class="kpi-value">${beatPct}%</div>
-        <div class="kpi-sub">of bets</div>
-      </div>
-      <div class="clv-kpi neutral">
-        <div class="kpi-label">Sample</div>
-        <div class="kpi-value">${total}</div>
-        <div class="kpi-sub">settled bets</div>
-      </div>
-      ${bookHtml}
-    `;
-  }
-
-  function render(data) {
-    currentData = data;
-    window.currentData = data;
-    const games = data.games || [];
-    const bets = (data.value_bets || []).filter(b => activeBooks.has(b.sportsbook));
-    const arbs = (data.arb_opportunities || []).filter(a => activeBooks.has(a.side_a_book) && activeBooks.has(a.side_b_book));
-    const bankroll = Number(document.getElementById('ctl-bankroll').value) || 1000;
-
-    currentFilteredGames = games.map(g => ({
-      ...g,
-      books: (g.books || []).filter(b => activeBooks.has(b.name))
-    }));
-    window.currentFilteredGames = currentFilteredGames;
-
-    // KPIs
-    document.getElementById('kpi-books').textContent = activeBooks.size;
-    document.getElementById('kpi-games').textContent = games.length;
-    document.getElementById('kpi-bets').textContent = bets.length;
-    const avgEdge = bets.length ? bets.reduce((a,b) => a + b.edge_probability_points, 0) / bets.length : 0;
-    const bestEdge = bets.length ? Math.max(...bets.map(b => b.edge_probability_points)) : 0;
-    const totalStake = bets.reduce((a,b) => a + b.recommended_stake, 0);
-    document.getElementById('kpi-edge').textContent = '+' + n(avgEdge) + 'pp';
-    document.getElementById('kpi-best').textContent = '+' + n(bestEdge) + 'pp';
-    document.getElementById('kpi-stake').textContent = '$' + n(totalStake);
-
-    // Polymarket KPI
-    const polyGames = games.filter(g => g.poly_home_prob);
-    const polyCount = polyGames.length;
-    document.getElementById('kpi-poly').textContent = polyCount > 0 ? polyCount + '/' + games.length : '\u2014';
-    if (polyCount > 0) {
-      const avgPolyEdge = polyGames.reduce((a, g) => a + Math.abs(g.home_prob - g.poly_home_prob) * 100, 0) / polyCount;
-      document.getElementById('kpi-poly-sub').textContent = 'avg ' + n(avgPolyEdge, 1) + 'pp diff';
-    } else {
-      document.getElementById('kpi-poly-sub').textContent = 'no data';
-    }
-
-    // Mode badge
-    const badge = document.getElementById('mode-badge');
-    if (badge) {
-      if (data.mode === 'live') {
-        badge.className = 'badge live'; badge.textContent = 'LIVE';
-      } else {
-        badge.className = 'badge demo'; badge.textContent = 'DEMO';
-      }
-    }
-
-    // Bankroll meter
-    const exposurePct = bankroll > 0 ? (totalStake / bankroll) * 100 : 0;
-    document.getElementById('bankroll-amount').textContent = '$' + n(totalStake) + ' / $' + bankroll.toLocaleString();
-    const fill = document.getElementById('meter-fill');
-    fill.style.width = Math.min(exposurePct, 100) + '%';
-    fill.className = 'meter-fill' + (exposurePct > 15 ? ' warn' : '');
-    document.getElementById('meter-pct').textContent = n(exposurePct, 1) + '%';
-
-    renderClv(data.clv || null);
-
-    document.getElementById('plays-count').textContent = bets.length;
-    renderPlays(bets);
-    document.getElementById('arb-count').textContent = arbs.length;
-    renderArbs(arbs);
-    document.getElementById('games-count').textContent = currentFilteredGames.length;
-    const grid = document.getElementById('games-grid');
-    if (!currentFilteredGames.length) {
-      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="icon">&#127954;</div><h3>No games loaded</h3><p>Click Refresh to load live data</p></div>';
-    } else {
-      grid.innerHTML = currentFilteredGames.map((g, i) => renderGameCard(g, bets, i)).join('');
-    }
-    document.getElementById('bets-count').textContent = bets.length;
-    renderBets(bets);
-  }
-
-  /* ---- TODAY'S PLAYS ---- */
-  function renderPlays(bets) {
-    const grid = document.getElementById('plays-grid');
-    if (!bets.length) {
-      grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:24px"><h3>No plays found</h3><p>Adjust thresholds or check back later</p></div>';
-      return;
-    }
-    grid.innerHTML = bets.slice(0, 8).map((b, i) => {
-      const game = esc(b.away_team) + ' @ ' + esc(b.home_team);
-      const odds = b.decimal_odds || dec(b.american_odds);
-      return `
-        <div class="play-card">
-          <div class="play-rank">#${i+1}</div>
-          <div class="play-action">BET ${esc(b.side)} ${esc(b.market || 'ML')}</div>
-          <div class="play-game">${game}</div>
-          <div class="play-details">
-            <div><div class="detail-label">Book</div><div class="detail-value">${bookLink(b.sportsbook, b.sportsbook_url)}</div></div>
-            <div><div class="detail-label">Odds</div><div class="detail-value">${odds}</div></div>
-            <div><div class="detail-label">Stake</div><div class="detail-value green">$${n(b.recommended_stake)}</div></div>
-            <div><div class="detail-label">Edge</div><div class="detail-value green">+${n(b.edge_probability_points)}pp</div></div>
-            <div><div class="detail-label">Model</div><div class="detail-value" style="color:var(--accent)">${pct(b.model_probability)}</div></div>
-            <div><div class="detail-label">Street</div><div class="detail-value" style="color:var(--amber)">${pct(b.implied_probability)}</div></div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  /* ---- ARB ALERTS ---- */
-  function renderArbs(arbs) {
-    const grid = document.getElementById('arb-grid');
-    if (!arbs.length) {
-      grid.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:16px"><p>No arbitrage opportunities found</p></div>';
-      return;
-    }
-    grid.innerHTML = arbs.map(a => {
-      const game = esc(a.away_team) + ' @ ' + esc(a.home_team);
-      const dollarA = (a.stake_a_pct).toFixed(2);
-      const dollarB = (a.stake_b_pct).toFixed(2);
-      return `
-        <div class="arb-card">
-          <div class="arb-title">ARB: ${esc(a.market)}</div>
-          <div class="arb-game">${game}</div>
-          <div class="arb-leg">
-            <span class="leg-side">${esc(a.side_a)}</span>
-            <span class="leg-book">${bookLink(a.side_a_book, a.side_a_url)}</span>
-            <span class="leg-odds">${n(a.side_a_odds)}</span>
-            <span class="leg-stake">${n(a.stake_a_pct, 1)}% ($${dollarA})</span>
-          </div>
-          <div class="arb-leg">
-            <span class="leg-side">${esc(a.side_b)}</span>
-            <span class="leg-book">${bookLink(a.side_b_book, a.side_b_url)}</span>
-            <span class="leg-odds">${n(a.side_b_odds)}</span>
-            <span class="leg-stake">${n(a.stake_b_pct, 1)}% ($${dollarB})</span>
-          </div>
-          <div class="arb-profit">
-            <span class="profit-label">Per $100 wagered</span>
-            <span class="profit-value">+$${n(a.profit_pct, 2)} (${n(a.profit_pct, 1)}%)</span>
-          </div>
-        </div>`;
-    }).join('');
-  }
+  /* ---- BOOK CHIP FILTER (client-side toggle) ---- */
+  document.querySelectorAll('.book-chip[data-book]').forEach(chip => {
+    const toggle = () => {
+      const book = chip.dataset.book;
+      if (activeBooks.has(book)) activeBooks.delete(book); else activeBooks.add(book);
+      chip.classList.toggle('active');
+      chip.setAttribute('aria-pressed', activeBooks.has(book) ? 'true' : 'false');
+      savePrefs();
+    };
+    chip.onclick = toggle;
+    chip.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+  });
 
   /* ---- SPARKLINE RENDERING ---- */
   function buildSparkPolyline(pts, w, h, color, dashed) {
@@ -451,181 +345,73 @@
       return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
     const dashAttr = dashed ? ' stroke-dasharray="4 3"' : '';
-    return `<polyline points="${coords}" fill="none" stroke="${color}" stroke-width="1.5"${dashAttr} stroke-linecap="round" stroke-linejoin="round"/>`;
+    return '<polyline points="' + coords + '" fill="none" stroke="' + color + '" stroke-width="1.5"' + dashAttr + ' stroke-linecap="round" stroke-linejoin="round"/>';
   }
 
-  function renderInjurySection(g) {
-    const inj = g.injuries;
-    if (!inj) return '';
-    const homeInj = inj.home || [];
-    const awayInj = inj.away || [];
-    if (!homeInj.length && !awayInj.length) return '';
-
-    function formatPlayers(players) {
-      return players.map(p => {
-        const statusAbbr = p.status.includes('Day-To-Day') ? 'DTD' : p.status.includes('Out') ? 'OUT' : p.status.includes('IR') ? 'IR' : p.status.slice(0, 3).toUpperCase();
-        return `<span class="injury-tag">${esc(p.name.split(' ').pop())}</span> <span class="injury-status">(${statusAbbr})</span>`;
-      }).join(', ');
-    }
-
-    let html = '<div class="injury-section">';
-    if (awayInj.length) {
-      html += `<div class="injury-line"><div class="injury-label">${esc(g.away)} Key Out</div>${formatPlayers(awayInj)}</div>`;
-    }
-    if (homeInj.length) {
-      html += `<div class="injury-line"><div class="injury-label">${esc(g.home)} Key Out</div>${formatPlayers(homeInj)}</div>`;
-    }
-    if (inj.significant) {
-      html += `<span class="injury-significant">${inj.adj_pp}pp swing</span>`;
-    }
-    html += '</div>';
-    return html;
-  }
-
-  function renderCardSparkline(g) {
-    const data = g.sparkline || [];
-    if (!data.length) return '';
-
-    const pts = data.map(d => d.home_implied);
-    const w = 120, h = 24;
-    const first = pts[0], last = pts[pts.length - 1];
-    const shift = last - first;
-    const color = shift > 0.005 ? 'var(--green)' : shift < -0.005 ? 'var(--red)' : 'var(--muted)';
-    const dirClass = shift > 0.005 ? 'spark-up' : shift < -0.005 ? 'spark-down' : 'spark-flat';
-    const sign = shift > 0 ? '+' : '';
-    const shiftPp = (shift * 100).toFixed(1);
-
-    const polyline = buildSparkPolyline(pts, w, h, color, false);
-    const openPct = (first * 100).toFixed(0);
-    const nowPct = (last * 100).toFixed(0);
-
-    return `<div class="sparkline-strip">
-      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
-        ${polyline}
-      </svg>
-      <span class="sparkline-label">
-        <span class="spark-open">${openPct}%</span>
-        <span class="spark-flat"> \u2192 </span>
-        <span class="spark-current ${dirClass}">${nowPct}%</span>
-        <span class="${dirClass}"> (${sign}${shiftPp}pp)</span>
-      </span>
-    </div>`;
+  function renderSparklines() {
+    document.querySelectorAll('.sparkline-strip[data-sparkline]').forEach(el => {
+      try {
+        const data = JSON.parse(el.dataset.sparkline);
+        if (!data || !data.length) return;
+        const pts = data.map(d => d.home_implied);
+        if (pts.length < 2) return;
+        const w = 120, h = 24;
+        const first = pts[0], last = pts[pts.length - 1];
+        const shift = last - first;
+        const color = shift > 0.005 ? 'var(--green)' : shift < -0.005 ? 'var(--red)' : 'var(--muted)';
+        const dirClass = shift > 0.005 ? 'spark-up' : shift < -0.005 ? 'spark-down' : 'spark-flat';
+        const sign = shift > 0 ? '+' : '';
+        const shiftPp = (shift * 100).toFixed(1);
+        const polyline = buildSparkPolyline(pts, w, h, color, false);
+        const openPct = (first * 100).toFixed(0);
+        const nowPct = (last * 100).toFixed(0);
+        el.innerHTML = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' + polyline + '</svg>' +
+          '<span class="sparkline-label"><span class="spark-open">' + openPct + '%</span>' +
+          '<span class="spark-flat"> \u2192 </span>' +
+          '<span class="spark-current ' + dirClass + '">' + nowPct + '%</span>' +
+          '<span class="' + dirClass + '"> (' + sign + shiftPp + 'pp)</span></span>';
+      } catch(e) {}
+    });
   }
 
   function renderModalSparkline(g) {
     const data = g.sparkline || [];
     if (data.length < 2) return '';
-
     const homePts = data.map(d => d.home_implied);
     const awayPts = data.map(d => d.away_implied);
     const times = data.map(d => d.time);
-
     const vw = 400, vh = 80;
     const homeLine = buildSparkPolyline(homePts, vw, vh, 'var(--accent)', false);
     const awayLine = buildSparkPolyline(awayPts, vw, vh, 'var(--amber)', true);
-
     const firstTime = times[0] || '';
     const lastTime = times[times.length - 1] || '';
     const homeOpen = (homePts[0] * 100).toFixed(1);
     const homeNow = (homePts[homePts.length - 1] * 100).toFixed(1);
     const awayOpen = (awayPts[0] * 100).toFixed(1);
     const awayNow = (awayPts[awayPts.length - 1] * 100).toFixed(1);
-
-    return `<div class="modal-sparkline">
-      <svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-        ${homeLine}
-        ${awayLine}
-      </svg>
-      <div class="modal-sparkline-labels">
-        <span>${firstTime}</span>
-        <span>${lastTime}</span>
-      </div>
-      <div class="modal-sparkline-legend">
-        <span class="leg-home">&#9644; ${esc(g.home)} ${homeOpen}% \u2192 ${homeNow}%</span>
-        <span class="leg-away">&#9148; ${esc(g.away)} ${awayOpen}% \u2192 ${awayNow}%</span>
-      </div>
-    </div>`;
+    return '<div class="modal-sparkline"><svg viewBox="0 0 ' + vw + ' ' + vh + '" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' + homeLine + awayLine + '</svg>' +
+      '<div class="modal-sparkline-labels"><span>' + firstTime + '</span><span>' + lastTime + '</span></div>' +
+      '<div class="modal-sparkline-legend"><span class="leg-home">&#9644; ' + esc(g.home) + ' ' + homeOpen + '% \u2192 ' + homeNow + '%</span>' +
+      '<span class="leg-away">&#9148; ' + esc(g.away) + ' ' + awayOpen + '% \u2192 ' + awayNow + '%</span></div></div>';
   }
 
-  /* ---- GAME CARD ---- */
-  function renderGameCard(g, bets, idx) {
-    const hasValue = bets.some(b => (b.home_team === g.home && b.away_team === g.away) || (b.home_team === g.away && b.away_team === g.home));
-    const hp = (g.home_prob * 100).toFixed(1);
-    const ap = (g.away_prob * 100).toFixed(1);
-    const homeFav = g.home_prob >= g.away_prob;
-    const time = g.commence ? new Date(g.commence).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZone:'America/New_York'}) + ' ET' : '';
+  /* ---- GAME TIME FORMATTING ---- */
+  document.querySelectorAll('.game-time[data-commence]').forEach(el => {
+    try {
+      const time = new Date(el.dataset.commence).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZone:'America/New_York'});
+      el.textContent = time + ' ET';
+    } catch(e) { el.textContent = ''; }
+  });
 
-    let streetRow = '';
-    if (g.books && g.books.length) {
-      const avgHImp = g.books.reduce((a, b) => a + (b.home_implied || 0), 0) / g.books.length;
-      const avgAImp = g.books.reduce((a, b) => a + (b.away_implied || 0), 0) / g.books.length;
-      const hEdge = g.home_prob - avgHImp;
-      const aEdge = g.away_prob - avgAImp;
-      const hArrow = hEdge > 0.01 ? '<span class="edge-arrow up">+' + (hEdge*100).toFixed(1) + 'pp</span>'
-                   : hEdge < -0.01 ? '<span class="edge-arrow down">' + (hEdge*100).toFixed(1) + 'pp</span>' : '';
-      const aArrow = aEdge > 0.01 ? '<span class="edge-arrow up">+' + (aEdge*100).toFixed(1) + 'pp</span>'
-                   : aEdge < -0.01 ? '<span class="edge-arrow down">' + (aEdge*100).toFixed(1) + 'pp</span>' : '';
-      streetRow = `<div class="prob-section-label street-label">The Street</div>
-        <div class="street-row">
-          <div class="street-btn"><span class="street-team">${esc(g.away)}</span> <span class="street-pct">${(avgAImp*100).toFixed(1)}%</span>${aArrow}</div>
-          <div class="street-btn"><span class="street-team">${esc(g.home)}</span> <span class="street-pct">${(avgHImp*100).toFixed(1)}%</span>${hArrow}</div>
-        </div>`;
+  /* ---- AMERICAN TO DECIMAL CONVERSION for server-rendered odds ---- */
+  document.querySelectorAll('[data-dec]').forEach(el => {
+    const am = parseInt(el.dataset.dec);
+    if (!isNaN(am)) {
+      el.textContent = am > 0 ? (am/100 + 1).toFixed(2) : (100/Math.abs(am) + 1).toFixed(2);
     }
+  });
 
-    let footer = '';
-    if (g.books && g.books.length) {
-      const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
-      const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
-      let lines = `<div class="best-line">
-        <span>Best: <strong>${esc(g.home)} ${dec(bestH)}</strong></span>
-        <span><strong>${esc(g.away)} ${dec(bestA)}</strong> &middot; ${g.books.length} books</span>
-      </div>`;
-      let polyLine = '';
-      if (g.poly_home_prob) {
-        const polyDiff = ((g.home_prob - g.poly_home_prob) * 100).toFixed(1);
-        const edgeClass = polyDiff > 0 ? 'positive' : polyDiff < 0 ? 'negative' : 'neutral';
-        const sign = polyDiff > 0 ? '+' : '';
-        polyLine = `<div class="poly-strip">
-          <span>Poly: ${esc(g.home)} ${(g.poly_home_prob*100).toFixed(0)}% / ${esc(g.away)} ${(g.poly_away_prob*100).toFixed(0)}%</span>
-          <span class="edge-badge ${edgeClass}">${sign}${polyDiff}pp</span>
-        </div>`;
-      }
-      const sparklineHtml = renderCardSparkline(g);
-      footer = `<div class="card-footer">${lines}${polyLine}${sparklineHtml}</div>`;
-    }
-
-    return `
-      <div class="game-card ${hasValue ? 'has-value' : ''}" onclick="openGameModal(${idx})" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openGameModal(${idx})}">
-        <div class="game-header">
-          <div class="game-matchup">
-            <span class="team-badge">${esc(g.away)}</span>
-            <span class="vs">@</span>
-            <span class="team-badge">${esc(g.home)}</span>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            ${hasValue ? '<span class="game-value-tag">VALUE</span>' : ''}
-            ${(g.props && g.props.length) ? '<span class="props-chip">' + g.props.length + ' props</span>' : ''}
-            <span class="game-time">${time}</span>
-          </div>
-        </div>
-        ${renderInjurySection(g)}
-        <div class="prob-section-label model-label">Our Model</div>
-        <div class="prob-buttons">
-          <div class="prob-btn ${!homeFav ? 'fav' : ''}">
-            <span class="prob-team">${esc(g.away)}</span>
-            <span class="prob-pct">${ap}%</span>
-          </div>
-          <div class="prob-btn ${homeFav ? 'fav' : ''}">
-            <span class="prob-team">${esc(g.home)}</span>
-            <span class="prob-pct">${hp}%</span>
-          </div>
-        </div>
-        ${streetRow}
-        ${footer}
-      </div>`;
-  }
-
-  /* ---- GAME DETAIL MODAL ---- */
+  /* ---- GAME DETAIL MODAL (kept as JS -- builds from data) ---- */
   window.openGameModal = function(idx) {
     const g = currentFilteredGames[idx];
     if (!g) return;
@@ -658,13 +444,7 @@
 
     let top3Html = '';
     if (top3.length) {
-      top3Html = `<div class="top-bets">
-        ${top3.map((b, i) => `<div class="top-bet-row">
-          <span class="rank">${i+1}</span>
-          <span class="bet-desc">${esc(b.side)} ${esc(b.market)} @ ${bookLink(b.book, b.url)}</span>
-          <span class="bet-meta">${n(b.odds)} &middot; EV +${n(b.ev, 3)} &middot; +${n(b.edge)}pp</span>
-        </div>`).join('')}
-      </div>`;
+      top3Html = '<div class="top-bets">' + top3.map((b, i) => '<div class="top-bet-row"><span class="rank">' + (i+1) + '</span><span class="bet-desc">' + esc(b.side) + ' ' + esc(b.market) + ' @ ' + bookLink(b.book, b.url) + '</span><span class="bet-meta">' + n(b.odds) + ' &middot; EV +' + n(b.ev, 3) + ' &middot; +' + n(b.edge) + 'pp</span></div>').join('') + '</div>';
     } else {
       top3Html = '<div class="no-arb">No positive EV bets found for this game</div>';
     }
@@ -673,20 +453,15 @@
     if (g.books && g.books.length) {
       const bestH = Math.max(...g.books.map(b => b.home_odds || -9999));
       const bestA = Math.max(...g.books.map(b => b.away_odds || -9999));
-      mlHtml = `<table>
-        <tr><th>Book</th><th>${esc(g.home)}</th><th>${esc(g.away)}</th><th>Edge</th></tr>
-        ${g.books.map(b => {
+      mlHtml = '<table><tr><th>Book</th><th>' + esc(g.home) + '</th><th>' + esc(g.away) + '</th><th>Edge</th></tr>' +
+        g.books.map(b => {
           const hE = b.home_edge || 0, aE = b.away_edge || 0;
           const best = Math.max(hE, aE);
-          return `<tr>
-            <td>${bookLink(b.name, b.url)}</td>
-            <td>${b.home_odds === bestH ? '<strong class="best-star">' : ''}${dec(b.home_odds)}${b.home_odds === bestH ? '</strong>' : ''}</td>
-            <td>${b.away_odds === bestA ? '<strong class="best-star">' : ''}${dec(b.away_odds)}${b.away_odds === bestA ? '</strong>' : ''}</td>
-            <td>
-              ${best > 0 ? '<span class="edge-badge positive">+' + n(best) + 'pp</span>' : '<span class="muted">&mdash;</span>'}
-            </td>
-          </tr>`;
-        }).join('')}</table>`;
+          return '<tr><td>' + bookLink(b.name, b.url) + '</td>' +
+            '<td>' + (b.home_odds === bestH ? '<strong class="best-star">' : '') + dec(b.home_odds) + (b.home_odds === bestH ? '</strong>' : '') + '</td>' +
+            '<td>' + (b.away_odds === bestA ? '<strong class="best-star">' : '') + dec(b.away_odds) + (b.away_odds === bestA ? '</strong>' : '') + '</td>' +
+            '<td>' + (best > 0 ? '<span class="edge-badge positive">+' + n(best) + 'pp</span>' : '<span class="muted">&mdash;</span>') + '</td></tr>';
+        }).join('') + '</table>';
     }
 
     let spreadHtml = '';
@@ -695,13 +470,10 @@
       const spread = sb[0].home_spread || -1.5;
       const bestHS = Math.max(...sb.map(b => b.home_spread_odds || -9999));
       const bestAS = Math.max(...sb.map(b => b.away_spread_odds || -9999));
-      spreadHtml = `<table>
-        <tr><th>Book</th><th>${esc(g.home)} ${spread}</th><th>${esc(g.away)} ${-spread}</th></tr>
-        ${sb.map(b => `<tr>
-          <td>${bookLink(b.name, b.url)}</td>
-          <td>${b.home_spread_odds === bestHS ? '<strong class="best-star">' : ''}${dec(b.home_spread_odds)}${b.home_spread_odds === bestHS ? '</strong>' : ''}</td>
-          <td>${b.away_spread_odds === bestAS ? '<strong class="best-star">' : ''}${dec(b.away_spread_odds)}${b.away_spread_odds === bestAS ? '</strong>' : ''}</td>
-        </tr>`).join('')}</table>`;
+      spreadHtml = '<table><tr><th>Book</th><th>' + esc(g.home) + ' ' + spread + '</th><th>' + esc(g.away) + ' ' + (-spread) + '</th></tr>' +
+        sb.map(b => '<tr><td>' + bookLink(b.name, b.url) + '</td>' +
+          '<td>' + (b.home_spread_odds === bestHS ? '<strong class="best-star">' : '') + dec(b.home_spread_odds) + (b.home_spread_odds === bestHS ? '</strong>' : '') + '</td>' +
+          '<td>' + (b.away_spread_odds === bestAS ? '<strong class="best-star">' : '') + dec(b.away_spread_odds) + (b.away_spread_odds === bestAS ? '</strong>' : '') + '</td></tr>').join('') + '</table>';
     }
 
     let totalHtml = '';
@@ -710,18 +482,15 @@
       const line = tb[0].total_line || 5.5;
       const bestO = Math.max(...tb.map(b => b.over_odds || -9999));
       const bestU = Math.max(...tb.map(b => b.under_odds || -9999));
-      totalHtml = `<table>
-        <tr><th>Book</th><th>Over ${line}</th><th>Under ${line}</th></tr>
-        ${tb.map(b => `<tr>
-          <td>${bookLink(b.name, b.url)}</td>
-          <td>${b.over_odds === bestO ? '<strong class="best-star">' : ''}${dec(b.over_odds)}${b.over_odds === bestO ? '</strong>' : ''}</td>
-          <td>${b.under_odds === bestU ? '<strong class="best-star">' : ''}${dec(b.under_odds)}${b.under_odds === bestU ? '</strong>' : ''}</td>
-        </tr>`).join('')}</table>`;
+      totalHtml = '<table><tr><th>Book</th><th>Over ' + line + '</th><th>Under ' + line + '</th></tr>' +
+        tb.map(b => '<tr><td>' + bookLink(b.name, b.url) + '</td>' +
+          '<td>' + (b.over_odds === bestO ? '<strong class="best-star">' : '') + dec(b.over_odds) + (b.over_odds === bestO ? '</strong>' : '') + '</td>' +
+          '<td>' + (b.under_odds === bestU ? '<strong class="best-star">' : '') + dec(b.under_odds) + (b.under_odds === bestU ? '</strong>' : '') + '</td></tr>').join('') + '</table>';
     }
 
     let arbHtml = '';
     if (arbs.length) {
-      arbHtml = arbs.map(a => `<div class="arb-badge">ARB: ${esc(a.market)} &mdash; ${esc(a.side_a)} @ ${esc(a.side_a_book)} (${n(a.side_a_odds)}) vs ${esc(a.side_b)} @ ${esc(a.side_b_book)} (${n(a.side_b_odds)}) &mdash; +${n(a.profit_pct)}%</div>`).join('');
+      arbHtml = arbs.map(a => '<div class="arb-badge">ARB: ' + esc(a.market) + ' &mdash; ' + esc(a.side_a) + ' @ ' + esc(a.side_a_book) + ' (' + n(a.side_a_odds) + ') vs ' + esc(a.side_b) + ' @ ' + esc(a.side_b_book) + ' (' + n(a.side_b_odds) + ') &mdash; +' + n(a.profit_pct) + '%</div>').join('');
     } else {
       let closest = 999;
       if (g.books && g.books.length > 1) {
@@ -729,42 +498,23 @@
         const awayDecAll = g.books.map(b => parseFloat(dec(b.away_odds)));
         closest = 1/Math.max(...homeDecAll) + 1/Math.max(...awayDecAll);
       }
-      arbHtml = `<div class="no-arb">No arb on this game${closest < 999 ? ' (margin: ' + n(closest, 3) + ')' : ''}</div>`;
+      arbHtml = '<div class="no-arb">No arb on this game' + (closest < 999 ? ' (margin: ' + n(closest, 3) + ')' : '') + '</div>';
     }
 
     let polyHtml = '';
     if (g.poly_home_prob) {
       const pHP = (g.poly_home_prob * 100).toFixed(1);
-      const pAP = (g.poly_away_prob * 100).toFixed(1);
       const modelDiffH = ((g.home_prob - g.poly_home_prob) * 100).toFixed(1);
-      const modelDiffA = ((g.away_prob - g.poly_away_prob) * 100).toFixed(1);
       const diffColor = v => parseFloat(v) > 0 ? 'var(--green)' : parseFloat(v) < 0 ? 'var(--red)' : 'var(--muted)';
-      polyHtml = `<div class="modal-section">
-        <h3>Polymarket vs Model</h3>
-        <div class="poly-compare">
-          <div class="poly-col">
-            <div class="poly-label">Our Model</div>
-            <div class="poly-pct poly-model">${hp}%</div>
-            <div class="poly-team">${esc(g.home)}</div>
-          </div>
-          <div class="poly-col" style="background:var(--amber-bg)">
-            <div class="poly-label" style="color:var(--amber)">Polymarket</div>
-            <div class="poly-pct poly-poly">${pHP}%</div>
-            <div class="poly-team">${esc(g.home)}</div>
-          </div>
-          <div class="poly-col">
-            <div class="poly-label">Edge</div>
-            <div class="poly-pct" style="color:${diffColor(modelDiffH)}">${modelDiffH > 0 ? '+' : ''}${modelDiffH}pp</div>
-            <div class="poly-team">${esc(g.home)}</div>
-          </div>
-        </div>
-      </div>`;
+      polyHtml = '<div class="modal-section"><h3>Polymarket vs Model</h3><div class="poly-compare">' +
+        '<div class="poly-col"><div class="poly-label">Our Model</div><div class="poly-pct poly-model">' + hp + '%</div><div class="poly-team">' + esc(g.home) + '</div></div>' +
+        '<div class="poly-col" style="background:var(--amber-bg)"><div class="poly-label" style="color:var(--amber)">Polymarket</div><div class="poly-pct poly-poly">' + pHP + '%</div><div class="poly-team">' + esc(g.home) + '</div></div>' +
+        '<div class="poly-col"><div class="poly-label">Edge</div><div class="poly-pct" style="color:' + diffColor(modelDiffH) + '">' + (modelDiffH > 0 ? '+' : '') + modelDiffH + 'pp</div><div class="poly-team">' + esc(g.home) + '</div></div>' +
+        '</div></div>';
     }
 
     const modalSparklineHtml = renderModalSparkline(g);
-    const lineMovementSection = modalSparklineHtml
-      ? `<div class="modal-section"><h3>Line Movement</h3>${modalSparklineHtml}</div>`
-      : '';
+    const lineMovementSection = modalSparklineHtml ? '<div class="modal-section"><h3>Line Movement</h3>' + modalSparklineHtml + '</div>' : '';
 
     let propsHtml = '';
     const propsData = g.props || [];
@@ -774,20 +524,13 @@
         const isWide = p.book_spread > SPREAD_WIDE_THRESHOLD;
         const spreadFmt = ((p.book_spread * 100).toFixed(1)) + '%';
         const spreadClass = isWide ? 'spread-wide' : 'spread-tight';
-        const overLink = p.best_over_key
-          ? bookLink(p.best_over_book, (D.books_urls || {})[p.best_over_key] || '')
-          : esc(p.best_over_book);
-        const underLink = p.best_under_key
-          ? bookLink(p.best_under_book, (D.books_urls || {})[p.best_under_key] || '')
-          : esc(p.best_under_book);
-        return `<tr class="${isWide ? 'wide-spread' : ''}">
-          <td style="font-weight:600">${esc(p.player_name)}</td>
-          <td style="color:var(--text-2)">${esc(p.market_label)}</td>
-          <td>${p.line}</td>
-          <td>${p.best_over_odds > 0 ? '+' : ''}${p.best_over_odds} <span style="font-size:10px;color:var(--muted)">${overLink}</span></td>
-          <td>${p.best_under_odds > 0 ? '+' : ''}${p.best_under_odds} <span style="font-size:10px;color:var(--muted)">${underLink}</span></td>
-          <td class="spread-col ${spreadClass}">${spreadFmt}</td>
-        </tr>`;
+        const overLink = p.best_over_key ? bookLink(p.best_over_book, (D.books_urls || {})[p.best_over_key] || '') : esc(p.best_over_book);
+        const underLink = p.best_under_key ? bookLink(p.best_under_book, (D.books_urls || {})[p.best_under_key] || '') : esc(p.best_under_book);
+        return '<tr class="' + (isWide ? 'wide-spread' : '') + '"><td style="font-weight:600">' + esc(p.player_name) + '</td>' +
+          '<td style="color:var(--text-2)">' + esc(p.market_label) + '</td><td>' + p.line + '</td>' +
+          '<td>' + (p.best_over_odds > 0 ? '+' : '') + p.best_over_odds + ' <span style="font-size:10px;color:var(--muted)">' + overLink + '</span></td>' +
+          '<td>' + (p.best_under_odds > 0 ? '+' : '') + p.best_under_odds + ' <span style="font-size:10px;color:var(--muted)">' + underLink + '</span></td>' +
+          '<td class="spread-col ' + spreadClass + '">' + spreadFmt + '</td></tr>';
       }).join('');
 
       const edgesData = g.prop_edges || [];
@@ -795,79 +538,42 @@
       if (edgesData.length) {
         const edgeItems = edgesData.slice(0, 3).map(e => {
           const dir = e.direction === 'over_value' ? 'Over value' : 'Under value';
-          return `<div class="props-edge-row"><strong>${esc(e.sportsbook)}</strong> &mdash; ${esc(e.player_name)} ${esc(e.market_label)}: line ${e.outlier_line} vs consensus ${e.consensus_line} &mdash; ${dir}</div>`;
+          return '<div class="props-edge-row"><strong>' + esc(e.sportsbook) + '</strong> &mdash; ' + esc(e.player_name) + ' ' + esc(e.market_label) + ': line ' + e.outlier_line + ' vs consensus ' + e.consensus_line + ' &mdash; ' + dir + '</div>';
         }).join('');
-        edgeNotes = `<div class="props-edge-note">Line discrepancies: ${edgeItems}</div>`;
+        edgeNotes = '<div class="props-edge-note">Line discrepancies: ' + edgeItems + '</div>';
       }
 
-      propsHtml = `<div class="modal-section">
-        <h3>Player Props <span style="font-weight:400;color:var(--muted);font-size:10px;text-transform:none;letter-spacing:0">(best odds across books &middot; sorted by spread)</span></h3>
-        <div style="overflow-x:auto">
-          <table class="props-table">
-            <thead><tr>
-              <th>Player</th><th>Market</th><th>Line</th>
-              <th>Best Over</th><th>Best Under</th><th>Book Spread</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-        ${edgeNotes}
-      </div>`;
+      propsHtml = '<div class="modal-section"><h3>Player Props <span style="font-weight:400;color:var(--muted);font-size:10px;text-transform:none;letter-spacing:0">(best odds across books &middot; sorted by spread)</span></h3>' +
+        '<div style="overflow-x:auto"><table class="props-table"><thead><tr><th>Player</th><th>Market</th><th>Line</th><th>Best Over</th><th>Best Under</th><th>Book Spread</th></tr></thead><tbody>' + rows + '</tbody></table></div>' + edgeNotes + '</div>';
     }
 
     const modal = document.getElementById('game-modal');
-    document.getElementById('modal-body').innerHTML = `
-      <button class="modal-close" onclick="closeGameModal()">&times;</button>
-      <div class="modal-header">
-        <div class="modal-matchup">
-          <span class="team-badge">${esc(g.away)}</span>
-          <span class="vs">@</span>
-          <span class="team-badge">${esc(g.home)}</span>
-          <span style="margin-left:auto;color:var(--muted);font-size:12px">${time}</span>
-        </div>
-        <div class="prob-section-label model-label" style="padding:0;margin-top:10px">Our Model</div>
-        <div class="prob-buttons" style="padding:0;margin-top:4px">
-          <div class="prob-btn ${g.away_prob >= g.home_prob ? 'fav' : ''}">
-            <span class="prob-team">${esc(g.away)}</span>
-            <span class="prob-pct">${ap}%</span>
-          </div>
-          <div class="prob-btn ${g.home_prob >= g.away_prob ? 'fav' : ''}">
-            <span class="prob-team">${esc(g.home)}</span>
-            <span class="prob-pct">${hp}%</span>
-          </div>
-        </div>
-        ${(() => {
-          if (!g.books || !g.books.length) return '';
-          const avgHI = g.books.reduce((a, b) => a + (b.home_implied || 0), 0) / g.books.length;
-          const avgAI = g.books.reduce((a, b) => a + (b.away_implied || 0), 0) / g.books.length;
-          const hE = g.home_prob - avgHI, aE = g.away_prob - avgAI;
-          const arrow = (e) => e > 0.01 ? '<span class="edge-arrow up">+' + (e*100).toFixed(1) + 'pp</span>'
-                             : e < -0.01 ? '<span class="edge-arrow down">' + (e*100).toFixed(1) + 'pp</span>' : '';
-          return `<div class="prob-section-label street-label" style="padding:0;margin-top:6px">The Street <span style="font-weight:400;letter-spacing:0">(avg of ${g.books.length} books)</span></div>
-            <div class="street-row" style="padding:0;margin-top:4px">
-              <div class="street-btn"><span class="street-team">${esc(g.away)}</span> <span class="street-pct">${(avgAI*100).toFixed(1)}%</span>${arrow(aE)}</div>
-              <div class="street-btn"><span class="street-team">${esc(g.home)}</span> <span class="street-pct">${(avgHI*100).toFixed(1)}%</span>${arrow(hE)}</div>
-            </div>`;
-        })()}
-      </div>
-      ${lineMovementSection}
-      ${polyHtml}
-      <div class="modal-section">
-        <h3>Best Bets</h3>
-        ${top3Html}
-      </div>
-      <div class="modal-section">
-        <h3>Moneyline</h3>
-        ${mlHtml || '<div class="no-arb">No odds available</div>'}
-      </div>
-      ${spreadHtml ? `<div class="modal-section"><h3>Puck Line</h3>${spreadHtml}</div>` : ''}
-      ${totalHtml ? `<div class="modal-section"><h3>Over / Under</h3>${totalHtml}</div>` : ''}
-      ${propsHtml}
-      <div class="modal-section">
-        <h3>Arb Check</h3>
-        ${arbHtml}
-      </div>
-    `;
+    document.getElementById('modal-body').innerHTML =
+      '<button class="modal-close" onclick="closeGameModal()">&times;</button>' +
+      '<div class="modal-header"><div class="modal-matchup"><span class="team-badge">' + esc(g.away) + '</span><span class="vs">@</span><span class="team-badge">' + esc(g.home) + '</span><span style="margin-left:auto;color:var(--muted);font-size:12px">' + time + '</span></div>' +
+      '<div class="prob-section-label model-label" style="padding:0;margin-top:10px">Our Model</div>' +
+      '<div class="prob-buttons" style="padding:0;margin-top:4px"><div class="prob-btn ' + (g.away_prob >= g.home_prob ? 'fav' : '') + '"><span class="prob-team">' + esc(g.away) + '</span><span class="prob-pct">' + ap + '%</span></div>' +
+      '<div class="prob-btn ' + (g.home_prob >= g.away_prob ? 'fav' : '') + '"><span class="prob-team">' + esc(g.home) + '</span><span class="prob-pct">' + hp + '%</span></div></div>' +
+      (function() {
+        if (!g.books || !g.books.length) return '';
+        const avgHI = g.books.reduce((a, b) => a + (b.home_implied || 0), 0) / g.books.length;
+        const avgAI = g.books.reduce((a, b) => a + (b.away_implied || 0), 0) / g.books.length;
+        const hE = g.home_prob - avgHI, aE = g.away_prob - avgAI;
+        const arrow = (e) => e > 0.01 ? '<span class="edge-arrow up">+' + (e*100).toFixed(1) + 'pp</span>' : e < -0.01 ? '<span class="edge-arrow down">' + (e*100).toFixed(1) + 'pp</span>' : '';
+        return '<div class="prob-section-label street-label" style="padding:0;margin-top:6px">The Street <span style="font-weight:400;letter-spacing:0">(avg of ' + g.books.length + ' books)</span></div>' +
+          '<div class="street-row" style="padding:0;margin-top:4px"><div class="street-btn"><span class="street-team">' + esc(g.away) + '</span> <span class="street-pct">' + (avgAI*100).toFixed(1) + '%</span>' + arrow(aE) + '</div>' +
+          '<div class="street-btn"><span class="street-team">' + esc(g.home) + '</span> <span class="street-pct">' + (avgHI*100).toFixed(1) + '%</span>' + arrow(hE) + '</div></div>';
+      })() +
+      '</div>' +
+      lineMovementSection +
+      polyHtml +
+      '<div class="modal-section"><h3>Best Bets</h3>' + top3Html + '</div>' +
+      '<div class="modal-section"><h3>Moneyline</h3>' + (mlHtml || '<div class="no-arb">No odds available</div>') + '</div>' +
+      (spreadHtml ? '<div class="modal-section"><h3>Puck Line</h3>' + spreadHtml + '</div>' : '') +
+      (totalHtml ? '<div class="modal-section"><h3>Over / Under</h3>' + totalHtml + '</div>' : '') +
+      propsHtml +
+      '<div class="modal-section"><h3>Arb Check</h3>' + arbHtml + '</div>';
+
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
     const closeBtn = document.querySelector('.modal-close');
@@ -887,40 +593,9 @@
     modal.addEventListener('keydown', modal._trapHandler);
   };
 
-  /* ---- VALUE BETS TABLE ---- */
-  function renderBets(bets) {
-    const body = document.getElementById('bets-body');
-    const sorted = [...bets].sort((a,b) => {
-      let av = a[sortKey], bv = b[sortKey];
-      if (sortKey === 'game') { av = a.away_team + a.home_team; bv = b.away_team + b.home_team; }
-      if (typeof av === 'string') return sortDesc ? bv.localeCompare(av) : av.localeCompare(bv);
-      return sortDesc ? bv - av : av - bv;
-    });
-    if (!sorted.length) {
-      body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted);">No value bets found at current thresholds</td></tr>';
-      return;
-    }
-    body.innerHTML = sorted.map((b, i) => {
-      const game = esc(b.away_team) + ' @ ' + esc(b.home_team);
-      const conf = b.confidence || 0;
-      const confPct = (conf * 100).toFixed(0);
-      const confColor = conf >= 0.7 ? 'var(--green)' : conf >= 0.4 ? 'var(--amber)' : 'var(--red)';
-      const odds = b.decimal_odds || dec(b.american_odds);
-      return `<tr>
-        <td>${i+1}</td>
-        <td>${game}</td>
-        <td style="font-weight:700">${esc(b.side)} ${esc(b.market || 'ML')}</td>
-        <td>${bookLink(b.sportsbook, b.sportsbook_url)}</td>
-        <td class="odds-col">${odds}</td>
-        <td style="color:var(--amber)">${pct(b.implied_probability)}</td>
-        <td style="font-weight:600;color:var(--accent)">${pct(b.model_probability)}</td>
-        <td class="edge-col"><span class="edge-badge positive">+${n(b.edge_probability_points)}pp</span></td>
-        <td class="ev-col">${n(b.expected_value_per_dollar, 3)}</td>
-        <td><span style="color:${confColor};font-weight:600">${confPct}%</span></td>
-        <td class="stake-col">$${n(b.recommended_stake)}</td>
-      </tr>`;
-    }).join('');
-  }
+  /* ---- VALUE BETS TABLE SORT (client-side, simple column sort) ---- */
+  let sortKey = 'edge_probability_points';
+  let sortDesc = true;
 
   window.sortBets = function(key) {
     if (sortKey === key) sortDesc = !sortDesc;
@@ -932,9 +607,24 @@
         th.removeAttribute('aria-sort');
       }
     });
-    render(currentData);
+    const tbody = document.getElementById('bets-body');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length <= 1) return;
+    const colIdx = { game: 1, side: 2, sportsbook: 3, decimal_odds: 4, implied_probability: 5,
+                     model_probability: 6, edge_probability_points: 7, expected_value_per_dollar: 8,
+                     confidence: 9, recommended_stake: 10 };
+    const ci = colIdx[key] || 1;
+    rows.sort((a, b) => {
+      const aText = a.cells[ci] ? a.cells[ci].textContent.replace(/[^0-9.\-]/g, '') : '';
+      const bText = b.cells[ci] ? b.cells[ci].textContent.replace(/[^0-9.\-]/g, '') : '';
+      const aNum = parseFloat(aText), bNum = parseFloat(bText);
+      if (!isNaN(aNum) && !isNaN(bNum)) return sortDesc ? bNum - aNum : aNum - bNum;
+      return sortDesc ? bText.localeCompare(aText) : aText.localeCompare(bText);
+    });
+    rows.forEach(r => tbody.appendChild(r));
   };
 
+  /* ---- REFRESH ---- */
   window.refreshDashboard = async function(demo) {
     const btn = document.getElementById('btn-refresh');
     const overlay = document.getElementById('loading-overlay');
@@ -949,24 +639,36 @@
         season: document.getElementById('ctl-season').value,
       });
       if (demo) params.set('demo', '1');
-      const res = await fetch('/api/dashboard?' + params.toString());
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || 'Request failed'); return; }
-      activeBooks = new Set(data.books || []);
-      window.activeBooks = activeBooks;
-      renderBooks(data.books || []);
-      render(data);
-      savePrefs();
+      window.location.href = '/games?' + params.toString();
     } catch(e) {
       alert('Network error: ' + e.message);
     } finally {
       if (btn) { btn.textContent = 'Refresh'; btn.disabled = false; }
-      autoRefreshCountdown = 60;
       if (overlay) overlay.classList.remove('active');
     }
   };
 
-  /* Auto-refresh handled by HTMX polling (hx-trigger="every 60s") */
+  let autoRefreshInterval = null;
+  let autoRefreshCountdown = 60;
+  function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshCountdown = 60;
+    autoRefreshInterval = setInterval(() => {
+      if (document.hidden) return;
+      if (currentData.mode !== 'live') return;
+      autoRefreshCountdown--;
+      const btn = document.getElementById('btn-refresh');
+      if (autoRefreshCountdown > 0) {
+        if (btn) btn.textContent = 'Refresh (' + autoRefreshCountdown + 's)';
+      } else {
+        autoRefreshCountdown = 60;
+        if (btn) btn.textContent = 'Refresh';
+        if (typeof htmx !== 'undefined') {
+          htmx.ajax('GET', '/games?region=' + (document.getElementById('ctl-region')?.value || 'qc'), '#content');
+        }
+      }
+    }, 1000);
+  }
 
   /* ---- HEDGE CALCULATOR ---- */
   let hedgeMode = 'lock_profit';
@@ -989,32 +691,13 @@
   window.calcHedge = function() {
     const errEl = document.getElementById('hedge-error');
     const resEl = document.getElementById('hedge-results');
-
     const origOdds = parseFloat(document.getElementById('hc-orig-odds').value);
     const origStake = parseFloat(document.getElementById('hc-orig-stake').value);
     const hedgeOdds = parseFloat(document.getElementById('hc-hedge-odds').value);
-
-    errEl.style.display = 'none';
-    errEl.textContent = '';
-
-    if (!origOdds || !origStake || !hedgeOdds) {
-      resEl.classList.remove('visible');
-      return;
-    }
-
-    if (origOdds <= 1.0 || hedgeOdds <= 1.0) {
-      errEl.textContent = 'Decimal odds must be greater than 1.00.';
-      errEl.style.display = 'block';
-      resEl.classList.remove('visible');
-      return;
-    }
-    if (origStake <= 0) {
-      errEl.textContent = 'Original stake must be positive.';
-      errEl.style.display = 'block';
-      resEl.classList.remove('visible');
-      return;
-    }
-
+    errEl.style.display = 'none'; errEl.textContent = '';
+    if (!origOdds || !origStake || !hedgeOdds) { resEl.classList.remove('visible'); return; }
+    if (origOdds <= 1.0 || hedgeOdds <= 1.0) { errEl.textContent = 'Decimal odds must be greater than 1.00.'; errEl.style.display = 'block'; resEl.classList.remove('visible'); return; }
+    if (origStake <= 0) { errEl.textContent = 'Original stake must be positive.'; errEl.style.display = 'block'; resEl.classList.remove('visible'); return; }
     const origPayout = origOdds * origStake;
     const hedgeStake = Math.round((origPayout / hedgeOdds) * 100) / 100;
     const totalOutlay = origStake + hedgeStake;
@@ -1022,44 +705,20 @@
     const profitHedgeWins = Math.round((hedgeStake * hedgeOdds - totalOutlay) * 100) / 100;
     const guaranteed = Math.min(profitOrigWins, profitHedgeWins);
     const roi = totalOutlay > 0 ? Math.round((guaranteed / totalOutlay) * 10000) / 100 : 0;
-
     const currentImpliedProb = 1.0 / hedgeOdds;
     const fairValue = Math.round(currentImpliedProb * origPayout * 100) / 100;
     const cashoutProfit = Math.round((fairValue - origStake) * 100) / 100;
-    const evIfHold = Math.round(
-      (currentImpliedProb * (origPayout - origStake) - (1 - currentImpliedProb) * origStake) * 100
-    ) / 100;
-
-    function fmtMoney(v) {
-      const s = Math.abs(v).toFixed(2);
-      return (v < 0 ? '-$' : '$') + s;
-    }
-    function colorClass(v) {
-      return v > 0 ? 'green' : v < 0 ? 'red' : '';
-    }
-
+    const evIfHold = Math.round((currentImpliedProb * (origPayout - origStake) - (1 - currentImpliedProb) * origStake) * 100) / 100;
+    function fmtMoney(v) { const s = Math.abs(v).toFixed(2); return (v < 0 ? '-$' : '$') + s; }
+    function colorClass(v) { return v > 0 ? 'green' : v < 0 ? 'red' : ''; }
     document.getElementById('hs-stake').textContent = '$' + hedgeStake.toFixed(2);
-    const owEl = document.getElementById('hs-orig-win');
-    owEl.textContent = fmtMoney(profitOrigWins);
-    owEl.className = 'hs-value ' + colorClass(profitOrigWins);
-    const hwEl = document.getElementById('hs-hedge-win');
-    hwEl.textContent = fmtMoney(profitHedgeWins);
-    hwEl.className = 'hs-value ' + colorClass(profitHedgeWins);
-    const gpEl = document.getElementById('hs-guaranteed');
-    gpEl.textContent = fmtMoney(guaranteed);
-    gpEl.className = 'hs-value ' + colorClass(guaranteed);
-    const roiEl = document.getElementById('hs-roi');
-    roiEl.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
-    roiEl.className = 'hs-value ' + colorClass(roi);
-
+    const owEl = document.getElementById('hs-orig-win'); owEl.textContent = fmtMoney(profitOrigWins); owEl.className = 'hs-value ' + colorClass(profitOrigWins);
+    const hwEl = document.getElementById('hs-hedge-win'); hwEl.textContent = fmtMoney(profitHedgeWins); hwEl.className = 'hs-value ' + colorClass(profitHedgeWins);
+    const gpEl = document.getElementById('hs-guaranteed'); gpEl.textContent = fmtMoney(guaranteed); gpEl.className = 'hs-value ' + colorClass(guaranteed);
+    const roiEl = document.getElementById('hs-roi'); roiEl.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%'; roiEl.className = 'hs-value ' + colorClass(roi);
     document.getElementById('hc-fair').textContent = '$' + fairValue.toFixed(2);
-    const cpEl = document.getElementById('hc-profit');
-    cpEl.textContent = fmtMoney(cashoutProfit);
-    cpEl.style.color = cashoutProfit >= 0 ? 'var(--green)' : 'var(--red)';
-    const evEl = document.getElementById('hc-ev');
-    evEl.textContent = fmtMoney(evIfHold);
-    evEl.style.color = evIfHold >= 0 ? 'var(--green)' : 'var(--red)';
-
+    const cpEl = document.getElementById('hc-profit'); cpEl.textContent = fmtMoney(cashoutProfit); cpEl.style.color = cashoutProfit >= 0 ? 'var(--green)' : 'var(--red)';
+    const evEl = document.getElementById('hc-ev'); evEl.textContent = fmtMoney(evIfHold); evEl.style.color = evIfHold >= 0 ? 'var(--green)' : 'var(--red)';
     resEl.classList.add('visible');
   };
 
@@ -1068,19 +727,14 @@
     const seasonEl = document.getElementById('ctl-season');
     if (seasonEl && !seasonEl.value) seasonEl.value = currentNhlSeason();
     restorePrefs();
-    renderBooks(D.books || []);
-    render(D);
+    renderSparklines();
     ['ctl-region','ctl-bankroll','ctl-min-edge','ctl-min-ev'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', savePrefs);
     });
-    if (D.mode !== 'live') {
-      refreshDashboard(false);
-    }
-    /* Auto-refresh via HTMX polling -- no JS timer needed */
+    startAutoRefresh();
   }
 
   gamesInit();
 })();
 </script>
-</div>{# end HTMX polling wrapper #}

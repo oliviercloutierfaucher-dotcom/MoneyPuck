@@ -1,36 +1,171 @@
-{# Shared Jinja2 macros for game cards, stat pills, and badges.
-   These are placeholder macros for now -- full server-side rendering
-   happens in Plans 02-03. #}
+{# Shared Jinja2 macros for game cards, value bet rows, arb cards, stat pills, and badges.
+   Server-side rendering replaces client-side JS DOM building. #}
 
-{% macro game_card(game) %}
-<div class="game-card">
+{% macro game_card(game, idx, value_bets) %}
+{%- set has_value = value_bets | selectattr('home_team', 'equalto', game.home) | list | length > 0 or value_bets | selectattr('home_team', 'equalto', game.away) | list | length > 0 -%}
+{%- set hp = (game.home_prob * 100) | round(1) -%}
+{%- set ap = (game.away_prob * 100) | round(1) -%}
+{%- set home_fav = game.home_prob >= game.away_prob -%}
+<div class="game-card {{ 'has-value' if has_value else '' }}" onclick="openGameModal({{ idx }})" tabindex="0"
+     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openGameModal({{ idx }})}"
+     style="backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
   <div class="game-header">
     <div class="game-matchup">
       <span class="team-badge">{{ game.away }}</span>
       <span class="vs">@</span>
       <span class="team-badge">{{ game.home }}</span>
     </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      {% if has_value %}<span class="game-value-tag">VALUE</span>{% endif %}
+      {% if game.props and game.props | length %}<span class="props-chip">{{ game.props | length }} props</span>{% endif %}
+      {% if game.commence %}<span class="game-time" data-commence="{{ game.commence }}"></span>{% endif %}
+    </div>
   </div>
+
+  {# Injury section #}
+  {% if game.injuries %}
+    {% set inj = game.injuries %}
+    {% set home_inj = inj.home or [] %}
+    {% set away_inj = inj.away or [] %}
+    {% if home_inj or away_inj %}
+    <div class="injury-section">
+      {% if away_inj %}
+      <div class="injury-line">
+        <div class="injury-label">{{ game.away }} Key Out</div>
+        {% for p in away_inj %}
+          {%- set status_abbr = 'DTD' if 'Day-To-Day' in p.status else ('OUT' if 'Out' in p.status else ('IR' if 'IR' in p.status else p.status[:3] | upper)) -%}
+          <span class="injury-tag">{{ p.name.split(' ')[-1] }}</span> <span class="injury-status">({{ status_abbr }})</span>{{ ', ' if not loop.last else '' }}
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if home_inj %}
+      <div class="injury-line">
+        <div class="injury-label">{{ game.home }} Key Out</div>
+        {% for p in home_inj %}
+          {%- set status_abbr = 'DTD' if 'Day-To-Day' in p.status else ('OUT' if 'Out' in p.status else ('IR' if 'IR' in p.status else p.status[:3] | upper)) -%}
+          <span class="injury-tag">{{ p.name.split(' ')[-1] }}</span> <span class="injury-status">({{ status_abbr }})</span>{{ ', ' if not loop.last else '' }}
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if inj.significant %}
+        <span class="injury-significant">{{ inj.adj_pp }}pp swing</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  {# Model probabilities -- dominant visual element #}
+  <div class="prob-section-label model-label">Our Model</div>
   <div class="prob-buttons">
-    <div class="prob-btn">
+    <div class="prob-btn {{ 'fav' if not home_fav else '' }}">
       <span class="prob-team">{{ game.away }}</span>
-      <span class="prob-pct">{{ (game.away_prob * 100)|round(1) }}%</span>
+      <span class="prob-pct">{{ ap }}%</span>
     </div>
-    <div class="prob-btn">
+    <div class="prob-btn {{ 'fav' if home_fav else '' }}">
       <span class="prob-team">{{ game.home }}</span>
-      <span class="prob-pct">{{ (game.home_prob * 100)|round(1) }}%</span>
+      <span class="prob-pct">{{ hp }}%</span>
     </div>
   </div>
+
+  {# Street (market consensus) row #}
+  {% if game.books and game.books | length %}
+    {%- set avg_h_imp = (game.books | map(attribute='home_implied') | list | sum) / (game.books | length) -%}
+    {%- set avg_a_imp = (game.books | map(attribute='away_implied') | list | sum) / (game.books | length) -%}
+    {%- set h_edge = game.home_prob - avg_h_imp -%}
+    {%- set a_edge = game.away_prob - avg_a_imp -%}
+    <div class="prob-section-label street-label">The Street</div>
+    <div class="street-row">
+      <div class="street-btn">
+        <span class="street-team">{{ game.away }}</span>
+        <span class="street-pct">{{ (avg_a_imp * 100) | round(1) }}%</span>
+        {% if a_edge > 0.01 %}<span class="edge-arrow up">+{{ (a_edge * 100) | round(1) }}pp</span>
+        {% elif a_edge < -0.01 %}<span class="edge-arrow down">{{ (a_edge * 100) | round(1) }}pp</span>{% endif %}
+      </div>
+      <div class="street-btn">
+        <span class="street-team">{{ game.home }}</span>
+        <span class="street-pct">{{ (avg_h_imp * 100) | round(1) }}%</span>
+        {% if h_edge > 0.01 %}<span class="edge-arrow up">+{{ (h_edge * 100) | round(1) }}pp</span>
+        {% elif h_edge < -0.01 %}<span class="edge-arrow down">{{ (h_edge * 100) | round(1) }}pp</span>{% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {# Card footer with best lines, Polymarket, sparkline placeholder #}
+  {% if game.books and game.books | length %}
+  <div class="card-footer">
+    {%- set best_h = game.books | map(attribute='home_odds') | list | max -%}
+    {%- set best_a = game.books | map(attribute='away_odds') | list | max -%}
+    <div class="best-line">
+      <span>Best: <strong>{{ game.home }} <span data-dec="{{ best_h }}"></span></strong></span>
+      <span><strong>{{ game.away }} <span data-dec="{{ best_a }}"></span></strong> &middot; {{ game.books | length }} books</span>
+    </div>
+    {% if game.poly_home_prob %}
+      {%- set poly_diff = ((game.home_prob - game.poly_home_prob) * 100) | round(1) -%}
+      {%- set edge_class = 'positive' if poly_diff > 0 else ('negative' if poly_diff < 0 else 'neutral') -%}
+    <div class="poly-strip">
+      <span>Poly: {{ game.home }} {{ (game.poly_home_prob * 100) | round(0) | int }}% / {{ game.away }} {{ (game.poly_away_prob * 100) | round(0) | int }}%</span>
+      <span class="edge-badge {{ edge_class }}">{{ '+' if poly_diff > 0 else '' }}{{ poly_diff }}pp</span>
+    </div>
+    {% endif %}
+    {# Sparkline placeholder -- JS populates from sparkline data #}
+    <div class="sparkline-strip" data-game-id="{{ game.game_id }}"
+         data-sparkline="{{ game.sparkline | default([]) | tojson }}"></div>
+  </div>
+  {% endif %}
 </div>
 {% endmacro %}
 
-{% macro stat_pill(label, value, color) %}
-<span class="kpi" style="{% if color %}color: {{ color }}{% endif %}">
+{% macro stat_pill(label, value, color="default") %}
+<span class="kpi {{ color }}" style="{% if color not in ('default', 'green', 'amber') %}color: {{ color }}{% endif %}">
   <span class="kpi-label">{{ label }}</span>
   <span class="kpi-value">{{ value }}</span>
 </span>
 {% endmacro %}
 
-{% macro badge(text, variant) %}
+{% macro value_bet_row(bet, idx) %}
+{%- set game = bet.away_team ~ ' @ ' ~ bet.home_team -%}
+{%- set conf = bet.confidence | default(0) -%}
+{%- set conf_pct = (conf * 100) | round(0) | int -%}
+{%- set conf_color = 'var(--green)' if conf >= 0.7 else ('var(--amber)' if conf >= 0.4 else 'var(--red)') -%}
+{%- set odds = bet.decimal_odds | default(0) -%}
+<tr>
+  <td>{{ idx }}</td>
+  <td>{{ game }}</td>
+  <td style="font-weight:700">{{ bet.side }} {{ bet.market | default('ML') }}</td>
+  <td>{% if bet.sportsbook_url %}<a href="{{ bet.sportsbook_url }}" target="_blank" rel="noopener">{{ bet.sportsbook }}</a>{% else %}{{ bet.sportsbook }}{% endif %}</td>
+  <td class="odds-col">{{ odds }}</td>
+  <td style="color:var(--amber)">{{ (bet.implied_probability * 100) | round(1) }}%</td>
+  <td style="font-weight:600;color:var(--accent)">{{ (bet.model_probability * 100) | round(1) }}%</td>
+  <td class="edge-col"><span class="edge-badge positive">+{{ bet.edge_probability_points | round(2) }}pp</span></td>
+  <td class="ev-col">{{ bet.expected_value_per_dollar | round(3) }}</td>
+  <td><span style="color:{{ conf_color }};font-weight:600">{{ conf_pct }}%</span></td>
+  <td class="stake-col">${{ bet.recommended_stake | round(2) }}</td>
+</tr>
+{% endmacro %}
+
+{% macro arb_card(arb) %}
+<div class="arb-card">
+  <div class="arb-title">ARB: {{ arb.market }}</div>
+  <div class="arb-game">{{ arb.away_team }} @ {{ arb.home_team }}</div>
+  <div class="arb-leg">
+    <span class="leg-side">{{ arb.side_a }}</span>
+    <span class="leg-book">{% if arb.side_a_url %}<a href="{{ arb.side_a_url }}" target="_blank" rel="noopener">{{ arb.side_a_book }}</a>{% else %}{{ arb.side_a_book }}{% endif %}</span>
+    <span class="leg-odds">{{ arb.side_a_odds | round(2) }}</span>
+    <span class="leg-stake">{{ arb.stake_a_pct | round(1) }}% (${{ arb.stake_a_pct | round(2) }})</span>
+  </div>
+  <div class="arb-leg">
+    <span class="leg-side">{{ arb.side_b }}</span>
+    <span class="leg-book">{% if arb.side_b_url %}<a href="{{ arb.side_b_url }}" target="_blank" rel="noopener">{{ arb.side_b_book }}</a>{% else %}{{ arb.side_b_book }}{% endif %}</span>
+    <span class="leg-odds">{{ arb.side_b_odds | round(2) }}</span>
+    <span class="leg-stake">{{ arb.stake_b_pct | round(1) }}% (${{ arb.stake_b_pct | round(2) }})</span>
+  </div>
+  <div class="arb-profit">
+    <span class="profit-label">Per $100 wagered</span>
+    <span class="profit-value">+${{ arb.profit_pct | round(2) }} ({{ arb.profit_pct | round(1) }}%)</span>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro badge(text, variant="default") %}
 <span class="badge {{ variant }}">{{ text }}</span>
 {% endmacro %}
