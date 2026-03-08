@@ -1,15 +1,39 @@
-{# Arbitrage tab partial -- stub for Plan 02 migration.
-   Currently shows placeholder; arb alerts rendered via games tab JS. #}
-{% from "macros/cards.html" import stat_pill %}
+{# Arbitrage tab partial -- server-side rendered arbitrage cards.
+   Renders from data dict via Jinja2 macros, no JS DOM building. #}
+{% from "macros/cards.html" import arb_card %}
+
+{%- set arb_opportunities = data.arb_opportunities | default([]) -%}
 
 <div hx-get="/arbs?demo={{ data.mode }}" hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
 
-<div class="section-title">Arbitrage Scanner</div>
-<div class="empty" style="padding:48px 20px">
-  <div class="icon" style="font-size:36px;opacity:0.4">&#9878;</div>
-  <h3>Arbitrage Opportunities</h3>
-  <p>View arb alerts on the Games tab.</p>
-  <p style="margin-top:8px;font-size:11px;color:var(--muted)">Dedicated arbitrage view coming in a future update.</p>
+<!-- KPI SUMMARY -->
+{%- set total_profit = 0 -%}
+{%- set best_profit = 0 -%}
+{%- if arb_opportunities %}
+  {%- set total_profit = arb_opportunities | map(attribute='profit_pct') | list | sum -%}
+  {%- set best_profit = arb_opportunities | map(attribute='profit_pct') | list | max -%}
+{%- endif %}
+
+<div class="kpi-strip" style="margin-bottom:20px">
+  <div class="kpi amber"><div class="kpi-label">Arb Opportunities</div><div class="kpi-value">{{ arb_opportunities | length }}</div></div>
+  <div class="kpi green"><div class="kpi-label">Best Profit</div><div class="kpi-value">{% if arb_opportunities %}+{{ best_profit | round(2) }}%{% else %}&mdash;{% endif %}</div></div>
+  <div class="kpi"><div class="kpi-label">Markets Scanned</div><div class="kpi-value">{{ data.games | default([]) | length * 3 }}</div><div class="kpi-sub">ML + Spread + Total</div></div>
+</div>
+
+<!-- ARB CARDS -->
+<div class="section-title">Arbitrage Opportunities <span class="count">{{ arb_opportunities | length }}</span></div>
+<div class="arb-grid">
+  {% if not arb_opportunities %}
+    <div class="empty" style="grid-column:1/-1;padding:48px 20px">
+      <div class="icon" style="font-size:36px;opacity:0.4">&#9878;</div>
+      <h3>No arbitrage opportunities</h3>
+      <p>All markets are efficiently priced right now. Check back when odds shift.</p>
+    </div>
+  {% else %}
+    {% for arb in arb_opportunities %}
+      {{ arb_card(arb) }}
+    {% endfor %}
+  {% endif %}
 </div>
 
 </div>{# end HTMX polling wrapper #}

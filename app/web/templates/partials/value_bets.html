@@ -1,15 +1,119 @@
-{# Value Bets tab partial -- stub for Plan 02 migration.
-   Currently shows placeholder; full content rendered via games tab JS. #}
-{% from "macros/cards.html" import stat_pill %}
+{# Value Bets tab partial -- server-side rendered value bets table and plays cards.
+   Renders from data dict via Jinja2 macros, no JS DOM building. #}
+{% from "macros/cards.html" import value_bet_row, stat_pill %}
+
+{%- set value_bets = data.value_bets | default([]) -%}
+{%- set games = data.games | default([]) -%}
 
 <div hx-get="/value-bets?demo={{ data.mode }}" hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
 
-<div class="section-title">Value Bets</div>
-<div class="empty" style="padding:48px 20px">
-  <div class="icon" style="font-size:36px;opacity:0.4">&#128176;</div>
-  <h3>Value Bets</h3>
-  <p>View tonight's value bets and detailed breakdown on the Games tab.</p>
-  <p style="margin-top:8px;font-size:11px;color:var(--muted)">Dedicated value bets view coming in a future update.</p>
+<!-- KPI SUMMARY -->
+{%- set avg_edge = 0 -%}
+{%- set best_edge = 0 -%}
+{%- set total_stake = 0 -%}
+{%- set total_ev = 0 -%}
+{%- if value_bets %}
+  {%- set avg_edge = (value_bets | map(attribute='edge_probability_points') | list | sum) / (value_bets | length) -%}
+  {%- set best_edge = value_bets | map(attribute='edge_probability_points') | list | max -%}
+  {%- set total_stake = value_bets | map(attribute='recommended_stake') | list | sum -%}
+  {%- set total_ev = value_bets | map(attribute='expected_value_per_dollar') | list | sum -%}
+{%- endif %}
+
+<div class="kpi-strip" style="margin-bottom:20px">
+  <div class="kpi green"><div class="kpi-label">Value Bets</div><div class="kpi-value">{{ value_bets | length }}</div></div>
+  <div class="kpi green"><div class="kpi-label">Avg Edge</div><div class="kpi-value">+{{ avg_edge | round(2) }}pp</div></div>
+  <div class="kpi"><div class="kpi-label">Best Edge</div><div class="kpi-value">+{{ best_edge | round(2) }}pp</div></div>
+  <div class="kpi"><div class="kpi-label">Total Stake</div><div class="kpi-value">${{ total_stake | round(2) }}</div></div>
+</div>
+
+<!-- TODAY'S PLAYS -->
+<div class="section-title">Today's Plays <span class="count">{{ value_bets | length }}</span></div>
+<div class="plays-grid" style="margin-bottom:28px">
+  {% if not value_bets %}
+    <div class="empty" style="grid-column:1/-1;padding:24px"><h3>No value bets found</h3><p>Adjust thresholds or check back later</p></div>
+  {% else %}
+    {% for bet in value_bets[:8] %}
+    <div class="play-card">
+      <div class="play-rank">#{{ loop.index }}</div>
+      <div class="play-action">BET {{ bet.side }} {{ bet.market | default('ML') }}</div>
+      <div class="play-game">{{ bet.away_team }} @ {{ bet.home_team }}</div>
+      <div class="play-details">
+        <div><div class="detail-label">Book</div><div class="detail-value">{% if bet.sportsbook_url %}<a href="{{ bet.sportsbook_url }}" target="_blank" rel="noopener">{{ bet.sportsbook }}</a>{% else %}{{ bet.sportsbook }}{% endif %}</div></div>
+        <div><div class="detail-label">Odds</div><div class="detail-value">{{ bet.decimal_odds | default(0) }}</div></div>
+        <div><div class="detail-label">Stake</div><div class="detail-value green">${{ bet.recommended_stake | round(2) }}</div></div>
+        <div><div class="detail-label">Edge</div><div class="detail-value green">+{{ bet.edge_probability_points | round(2) }}pp</div></div>
+        <div><div class="detail-label">Model</div><div class="detail-value" style="color:var(--accent)">{{ (bet.model_probability * 100) | round(1) }}%</div></div>
+        <div><div class="detail-label">Street</div><div class="detail-value" style="color:var(--amber)">{{ (bet.implied_probability * 100) | round(1) }}%</div></div>
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<!-- VALUE BETS TABLE -->
+<div class="section-title">Detailed Breakdown <span class="count">{{ value_bets | length }}</span></div>
+<div class="value-table-wrap">
+  <table class="value-table" id="vb-table">
+    <thead>
+      <tr>
+        <th onclick="sortVbTable('game')" data-sort-key="game">#</th>
+        <th onclick="sortVbTable('game')" data-sort-key="game">Game</th>
+        <th onclick="sortVbTable('side')" data-sort-key="side">Pick</th>
+        <th onclick="sortVbTable('sportsbook')" data-sort-key="sportsbook">Book</th>
+        <th onclick="sortVbTable('decimal_odds')" data-sort-key="decimal_odds">Odds</th>
+        <th onclick="sortVbTable('implied_probability')" data-sort-key="implied_probability">Street %</th>
+        <th onclick="sortVbTable('model_probability')" data-sort-key="model_probability">Our Model %</th>
+        <th onclick="sortVbTable('edge_probability_points')" data-sort-key="edge_probability_points">Edge</th>
+        <th onclick="sortVbTable('expected_value_per_dollar')" data-sort-key="expected_value_per_dollar">EV/$</th>
+        <th onclick="sortVbTable('confidence')" data-sort-key="confidence">Conf</th>
+        <th onclick="sortVbTable('recommended_stake')" data-sort-key="recommended_stake">Stake</th>
+      </tr>
+    </thead>
+    <tbody id="vb-body">
+      {% if not value_bets %}
+        <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--muted);">No value bets found at current thresholds</td></tr>
+      {% else %}
+        {% for bet in value_bets %}
+          {{ value_bet_row(bet, loop.index) }}
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
 </div>
 
 </div>{# end HTMX polling wrapper #}
+
+<script>
+/* ---- Value Bets tab sort (client-side column sort) ---- */
+(function() {
+  let sortKey = 'edge_probability_points';
+  let sortDesc = true;
+
+  window.sortVbTable = function(key) {
+    if (sortKey === key) sortDesc = !sortDesc;
+    else { sortKey = key; sortDesc = true; }
+    document.querySelectorAll('#vb-table th[data-sort-key]').forEach(th => {
+      if (th.dataset.sortKey === key) {
+        th.setAttribute('aria-sort', sortDesc ? 'descending' : 'ascending');
+      } else {
+        th.removeAttribute('aria-sort');
+      }
+    });
+    const tbody = document.getElementById('vb-body');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length <= 1) return;
+    const colIdx = { game: 1, side: 2, sportsbook: 3, decimal_odds: 4, implied_probability: 5,
+                     model_probability: 6, edge_probability_points: 7, expected_value_per_dollar: 8,
+                     confidence: 9, recommended_stake: 10 };
+    const ci = colIdx[key] || 1;
+    rows.sort((a, b) => {
+      const aText = a.cells[ci] ? a.cells[ci].textContent.replace(/[^0-9.\-]/g, '') : '';
+      const bText = b.cells[ci] ? b.cells[ci].textContent.replace(/[^0-9.\-]/g, '') : '';
+      const aNum = parseFloat(aText), bNum = parseFloat(bText);
+      if (!isNaN(aNum) && !isNaN(bNum)) return sortDesc ? bNum - aNum : aNum - bNum;
+      return sortDesc ? bText.localeCompare(aText) : aText.localeCompare(bText);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+  };
+})();
+</script>
