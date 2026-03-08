@@ -1,6 +1,8 @@
 {# Performance tab partial -- Server-rendered performance dashboard with
    KPIs, Chart.js bar chart, by-book table, and recent bets. #}
 
+<div hx-get="/performance?demo={{ data.mode|default('demo') }}" hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
+
 <div class="perf-section" id="perf-section">
   <div class="section-title">Performance Tracker</div>
 
@@ -143,3 +145,5 @@
 
   {% endif %}
 </div>
+
+</div>{# end HTMX polling wrapper #}

@@ -1,6 +1,8 @@
-{# Arbitrage tab partial -- stub for Plan 02-03 migration.
+{# Arbitrage tab partial -- stub for Plan 02 migration.
    Currently shows placeholder; arb alerts rendered via games tab JS. #}
 {% from "macros/cards.html" import stat_pill %}
+
+<div hx-get="/arbs?demo={{ data.mode }}" hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
 
 <div class="section-title">Arbitrage Scanner</div>
 <div class="empty" style="padding:48px 20px">
@@ -9,3 +11,5 @@
   <p>View arb alerts on the Games tab.</p>
   <p style="margin-top:8px;font-size:11px;color:var(--muted)">Dedicated arbitrage view coming in a future update.</p>
 </div>
+
+</div>{# end HTMX polling wrapper #}

@@ -3,6 +3,9 @@
    and bankroll meter. Self-contained HTML fragment. #}
 {% from "macros/cards.html" import game_card, stat_pill %}
 
+<div hx-get="/games?demo={{ data.mode }}&region={{ data.config.region|default('qc') }}&bankroll={{ data.config.bankroll|default(1000) }}&min_edge={{ data.config.min_edge|default(2.0) }}&min_ev={{ data.config.min_ev|default(0.02) }}"
+     hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
+
 <!-- CONTROLS -->
 <div class="controls">
   <div class="control-group">
@@ -963,46 +966,7 @@
     }
   };
 
-  let autoRefreshInterval = null;
-  let autoRefreshCountdown = 60;
-  function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshCountdown = 60;
-    autoRefreshInterval = setInterval(() => {
-      if (document.hidden) return;
-      if (currentData.mode !== 'live') return;
-      autoRefreshCountdown--;
-      const btn = document.getElementById('btn-refresh');
-      if (autoRefreshCountdown > 0) {
-        if (btn) btn.textContent = 'Refresh (' + autoRefreshCountdown + 's)';
-      } else {
-        autoRefreshCountdown = 60;
-        if (btn) btn.textContent = 'Refresh';
-        silentRefresh();
-      }
-    }, 1000);
-  }
-
-  async function silentRefresh() {
-    try {
-      const params = new URLSearchParams({
-        region: document.getElementById('ctl-region').value,
-        bankroll: document.getElementById('ctl-bankroll').value,
-        min_edge: document.getElementById('ctl-min-edge').value,
-        min_ev: document.getElementById('ctl-min-ev').value,
-        season: document.getElementById('ctl-season').value,
-      });
-      const res = await fetch('/api/dashboard?' + params.toString());
-      const data = await res.json();
-      if (!res.ok) return;
-      activeBooks = new Set(data.books || []);
-      window.activeBooks = activeBooks;
-      renderBooks(data.books || []);
-      render(data);
-      savePrefs();
-      autoRefreshCountdown = 60;
-    } catch(e) {}
-  }
+  /* Auto-refresh handled by HTMX polling (hx-trigger="every 60s") */
 
   /* ---- HEDGE CALCULATOR ---- */
   let hedgeMode = 'lock_profit';
@@ -1113,9 +1077,10 @@
     if (D.mode !== 'live') {
       refreshDashboard(false);
     }
-    startAutoRefresh();
+    /* Auto-refresh via HTMX polling -- no JS timer needed */
   }
 
   gamesInit();
 })();
 </script>
+</div>{# end HTMX polling wrapper #}

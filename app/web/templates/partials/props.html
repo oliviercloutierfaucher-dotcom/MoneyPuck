@@ -1,6 +1,8 @@
 {# Player Props tab partial -- Server-rendered player prop comparisons
    aggregated from all games. Shows best over/under odds per player+market. #}
 
+<div hx-get="/props?demo={{ data.mode }}" hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
+
 <div class="section-title">Player Props</div>
 
 {% set all_props = [] %}
@@ -59,3 +61,5 @@
   {{ all_props|length }} prop comparison{{ 's' if all_props|length != 1 else '' }} across {{ data.games|length }} game{{ 's' if data.games|length != 1 else '' }}
 </div>
 {% endif %}
+
+</div>{# end HTMX polling wrapper #}
