@@ -2,6 +2,8 @@
    book chips, game cards grid, plays, arbs, value bets table, CLV,
    and bankroll meter. Server-side rendered via Jinja2 macros. #}
 {% from "macros/cards.html" import game_card, stat_pill, value_bet_row, arb_card %}
+<div hx-get="/games?demo={{ data.mode|default('live') }}&region={{ data.region|default('qc') }}&bankroll={{ data.bankroll|default(1000) }}&min_edge={{ data.min_edge|default(2.0) }}&min_ev={{ data.min_ev|default(0.02) }}"
+     hx-trigger="every 60s" hx-target="this" hx-swap="innerHTML">
 
 {# Pre-compute filtered value bets and arbs from data context #}
 {%- set games = data.games | default([]) -%}
@@ -648,27 +650,6 @@
     }
   };
 
-  let autoRefreshInterval = null;
-  let autoRefreshCountdown = 60;
-  function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshCountdown = 60;
-    autoRefreshInterval = setInterval(() => {
-      if (document.hidden) return;
-      if (currentData.mode !== 'live') return;
-      autoRefreshCountdown--;
-      const btn = document.getElementById('btn-refresh');
-      if (autoRefreshCountdown > 0) {
-        if (btn) btn.textContent = 'Refresh (' + autoRefreshCountdown + 's)';
-      } else {
-        autoRefreshCountdown = 60;
-        if (btn) btn.textContent = 'Refresh';
-        if (typeof htmx !== 'undefined') {
-          htmx.ajax('GET', '/games?region=' + (document.getElementById('ctl-region')?.value || 'qc'), '#content');
-        }
-      }
-    }, 1000);
-  }
 
   /* ---- HEDGE CALCULATOR ---- */
   let hedgeMode = 'lock_profit';
@@ -732,9 +713,9 @@
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', savePrefs);
     });
-    startAutoRefresh();
   }
 
   gamesInit();
 })();
 </script>
+</div>
