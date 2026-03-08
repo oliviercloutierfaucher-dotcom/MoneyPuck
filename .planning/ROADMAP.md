@@ -161,16 +161,25 @@ Plans:
 
 **Requirements:** R5.3, R5.4, R5.5, R5.6, R5.7
 
-**Approach:**
-- Add Tailwind CSS via CDN + DaisyUI components
-- Multi-page routing: /games, /value-bets, /arbs, /performance, /props
-- HTMX for partial updates (game cards, odds tables)
-- SSE endpoint for real-time odds push
-- Mobile-responsive with card-based layout
-- TradingView Lightweight Charts for line movement
-- Chart.js for P&L and performance graphs
+**Plans:** 3 plans
 
-**Success:** Dashboard looks comparable to BetQL/Betstamp.
+Plans:
+- [ ] 07-01-PLAN.md — Template decomposition (shell + 5 partials + macros), HTMX tab nav, dual-mode route handlers, routing tests
+- [ ] 07-02-PLAN.md — Server-side Jinja2 rendering for games/value-bets/arbs partials, mobile-responsive CSS
+- [ ] 07-03-PLAN.md — Performance page with Chart.js, props partial, HTMX polling auto-refresh, visual verification
+
+**Approach:**
+- Split monolithic base.html into shell + 5 tab partials + shared Jinja2 macros
+- Tab-based SPA using HTMX (hx-get to partial endpoints, hx-push-url for bookmarkable URLs)
+- Dual-mode route handlers: HX-Request header detection for partial vs full page
+- Server-side Jinja2 rendering replaces client-side JS DOM building
+- Polish existing CSS variable system (no Tailwind -- keep current design system)
+- Glassmorphism touches, card hover lifts, smooth transitions
+- Chart.js via CDN for performance page P&L charts
+- HTMX polling at 60s replaces JS setInterval (no SSE)
+- Mobile breakpoints at 480px, 768px, 1024px
+
+**Success:** Dashboard looks comparable to BetQL/Betstamp on desktop and mobile.
 
 ---
 
