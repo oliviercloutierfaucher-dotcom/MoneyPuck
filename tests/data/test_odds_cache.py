@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from app.web.web_preview import TTLCache
+from app.web.app import TTLCache
 
 
 def test_cache_hit():

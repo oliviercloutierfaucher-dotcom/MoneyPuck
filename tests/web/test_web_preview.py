@@ -1,4 +1,4 @@
-from app.web.web_preview import _build_demo_dashboard
+from app.web.app import _build_demo_dashboard
 
 
 def test_demo_dashboard_shape():

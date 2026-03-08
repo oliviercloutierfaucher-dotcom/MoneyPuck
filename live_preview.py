@@ -427,7 +427,7 @@ def main() -> int:
     python tracker.py --army --json
 
   To start the web dashboard:
-    python -m app.web.web_preview            # http://localhost:8080
+    uvicorn app.web.app:app --port 8080       # http://localhost:8080
 
   Model: 16-metric composite | Logistic win prob | Confidence-adj Kelly
   Data: MoneyPuck team GBG (100+ cols) + NHL API goalies + The Odds API

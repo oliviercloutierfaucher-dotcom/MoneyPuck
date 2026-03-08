@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from app.web.web_preview import _aggregate_performance, _demo_performance_data, _build_performance_data
+from app.web.app import _aggregate_performance, _demo_performance_data, _build_performance_data
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ class TestAggregatePerformance:
 class TestBuildPerformanceData:
     def test_falls_back_to_demo_when_db_missing(self, monkeypatch, tmp_path):
         """If DB_PATH does not exist, returns demo data."""
-        import app.web.web_preview as wp
+        import app.web.app as wp
         monkeypatch.setattr(
             "app.data.database.DB_PATH",
             tmp_path / "nonexistent.db",
