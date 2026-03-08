@@ -142,7 +142,7 @@ Plans:
 
 Plans:
 - [x] 06-01-PLAN.md — Create FastAPI app with all routes and Jinja2 template
-- [ ] 06-02-PLAN.md — Update Dockerfile, migrate tests, delete old server, visual verify
+- [x] 06-02-PLAN.md — Update Dockerfile, migrate tests, delete old server, visual verify
 
 **Approach:**
 - Install fastapi, uvicorn, jinja2

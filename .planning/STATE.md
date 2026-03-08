@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-08T00:01:00.000Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-08T00:10:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
+  completed_phases: 6
+  total_plans: 12
+  completed_plans: 12
 ---
 
 # Project State
@@ -18,7 +18,7 @@ progress:
 **Milestone 1: Production-Ready Platform**
 
 ## Current Phase
-**Phase 6: FastAPI Migration** — Plan 1/2 complete
+**Phase 6: FastAPI Migration** — Complete (2/2 plans)
 
 ## Completed Phases
 - **Phase 1: Persistent Storage** — Complete (2026-03-06)
@@ -35,12 +35,16 @@ progress:
 - **Phase 5: Injury Impact System** — Complete (2026-03-07)
   - ESPN injury fetcher, player tier classification, pipeline integration
   - Dashboard shows key injuries on game cards
+- **Phase 6: FastAPI Migration** — Complete (2026-03-08)
+  - FastAPI app with all routes, Jinja2 template, security middleware
+  - Dockerfile updated to uvicorn, old stdlib server deleted
+  - 575 tests passing
 
 ## Key Context
 - CI/CD pipeline active: GitHub Actions + Railway "Wait for CI" (Phase 2 complete)
-- FastAPI app created alongside old stdlib server (Phase 6 Plan 1 complete)
+- FastAPI migration complete: app.web.app serves all routes via uvicorn
 - Jinja2 template replaces f-string for FastAPI rendering path
-- Old web_preview.py still active until Phase 6 Plan 2 switches over
+- Old web_preview.py deleted -- all logic in app.web.app
 - Research docs in `.planning/research/` cover model, frontend, auth, ops
 
 ## Decisions
@@ -68,19 +72,22 @@ progress:
 - [Phase 06]: Keep render_dashboard() in presentation.py for CLI backward compatibility
 - [Phase 06]: Jinja2 template is new rendering path for FastAPI; old f-string stays for CLI
 - [Phase 06]: Security headers applied via middleware, matching existing PreviewHandler behavior
+- [Phase 06]: Dockerfile CMD uses shell form for PORT env var interpolation
+- [Phase 06]: Old web_preview.py fully deleted -- all logic lives in app.web.app
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Completed 06-01-PLAN.md
-- **Timestamp:** 2026-03-08T00:01:00Z
+- **Stopped at:** Completed 06-02-PLAN.md
+- **Timestamp:** 2026-03-08T00:10:00Z
 
 ## Performance Metrics
 
 | Phase-Plan | Duration | Tasks | Files |
 |-----------|----------|-------|-------|
 | 06-01     | 6m32s    | 2     | 3     |
+| 06-02     | 4min     | 2     | 8     |
 
 ---
 *Last updated: 2026-03-08*

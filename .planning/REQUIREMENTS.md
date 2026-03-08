@@ -41,8 +41,8 @@ Zero roster awareness. Missing McDavid is treated same as full-health.
 
 ### R5: Professional Web Dashboard (P1 — Presentation)
 Single-file f-string HTML is unmaintainable and looks amateur.
-- **R5.1** Migrate backend to FastAPI + Uvicorn (keep existing pipeline)
-- **R5.2** Extract HTML to Jinja2 templates (proper .html files)
+- [x] **R5.1** Migrate backend to FastAPI + Uvicorn (keep existing pipeline)
+- [x] **R5.2** Extract HTML to Jinja2 templates (proper .html files)
 - **R5.3** Multi-page routing: Tonight's Games, Value Bets, Arbs, Performance, Props
 - **R5.4** Tailwind CSS for professional styling (CDN, no build step)
 - **R5.5** HTMX for dynamic partial updates (replace full-page refresh)
