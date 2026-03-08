@@ -1185,9 +1185,45 @@ app.include_router(api)
 # ---------------------------------------------------------------------------
 
 
+def _dashboard_data(demo: str, region: str, bankroll: float, min_edge: float, min_ev: float) -> dict:
+    """Build dashboard data (shared by multiple tab routes)."""
+    params = _make_params(region=region, bankroll=bankroll, min_edge=min_edge, min_ev=min_ev)
+    if _is_demo(demo):
+        return _build_demo_dashboard(params)
+    return _build_live_dashboard(params)
+
+
+def _tab_response(
+    request: Request,
+    active_tab: str,
+    partial_name: str,
+    data: dict,
+    extra_context: dict | None = None,
+):
+    """Return full page or partial based on HX-Request header."""
+    data_json = json.dumps(data).replace("</", r"<\/")
+    context = {"data": data, "data_json": data_json}
+    if extra_context:
+        context.update(extra_context)
+
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(
+            request=request,
+            name=partial_name,
+            context=context,
+        )
+    context["active_tab"] = active_tab
+    return templates.TemplateResponse(
+        request=request,
+        name="base.html",
+        context=context,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
+@app.get("/games", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
-def dashboard_page(
+def games_page(
     request: Request,
     region: str = "qc",
     demo: str = "0",
@@ -1195,17 +1231,61 @@ def dashboard_page(
     min_edge: float = 2.0,
     min_ev: float = 0.02,
 ):
-    params = _make_params(region=region, bankroll=bankroll, min_edge=min_edge, min_ev=min_ev)
-    if _is_demo(demo):
-        data = _build_demo_dashboard(params)
-    else:
-        data = _build_live_dashboard(params)
+    data = _dashboard_data(demo, region, bankroll, min_edge, min_ev)
+    return _tab_response(request, "games", "partials/games.html", data)
 
-    # Escape </ sequences to prevent breaking out of <script> tags (XSS)
-    data_json = json.dumps(data).replace("</", r"<\/")
 
-    return templates.TemplateResponse(
-        request=request,
-        name="base.html",
-        context={"data": data, "data_json": data_json, "active_tab": "games"},
+@app.get("/value-bets", response_class=HTMLResponse)
+def value_bets_page(
+    request: Request,
+    region: str = "qc",
+    demo: str = "0",
+    bankroll: float = 1000.0,
+    min_edge: float = 2.0,
+    min_ev: float = 0.02,
+):
+    data = _dashboard_data(demo, region, bankroll, min_edge, min_ev)
+    return _tab_response(request, "value-bets", "partials/value_bets.html", data)
+
+
+@app.get("/arbs", response_class=HTMLResponse)
+def arbs_page(
+    request: Request,
+    region: str = "qc",
+    demo: str = "0",
+    bankroll: float = 1000.0,
+    min_edge: float = 2.0,
+    min_ev: float = 0.02,
+):
+    data = _dashboard_data(demo, region, bankroll, min_edge, min_ev)
+    return _tab_response(request, "arbs", "partials/arbs.html", data)
+
+
+@app.get("/performance", response_class=HTMLResponse)
+def performance_page(
+    request: Request,
+    region: str = "qc",
+    demo: str = "0",
+    bankroll: float = 1000.0,
+    min_edge: float = 2.0,
+    min_ev: float = 0.02,
+):
+    data = _dashboard_data(demo, region, bankroll, min_edge, min_ev)
+    perf = _build_performance_data()
+    return _tab_response(
+        request, "performance", "partials/performance.html", data,
+        extra_context={"perf_data": perf},
     )
+
+
+@app.get("/props", response_class=HTMLResponse)
+def props_page(
+    request: Request,
+    region: str = "qc",
+    demo: str = "0",
+    bankroll: float = 1000.0,
+    min_edge: float = 2.0,
+    min_ev: float = 0.02,
+):
+    data = _dashboard_data(demo, region, bankroll, min_edge, min_ev)
+    return _tab_response(request, "props", "partials/props.html", data)
