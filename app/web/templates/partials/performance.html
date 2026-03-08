@@ -1,0 +1,157 @@
+{# Performance tab partial -- Performance tracker with KPIs, bar chart,
+   by-book table, and recent bets. Self-contained HTML fragment. #}
+{% from "macros/cards.html" import stat_pill %}
+
+<div class="perf-section" id="perf-section">
+  <div class="section-title">Performance Tracker</div>
+  <div class="perf-empty" id="perf-placeholder">Loading performance data...</div>
+  <div id="perf-content" style="display:none">
+    <!-- KPI strip -->
+    <div class="kpi-strip" style="margin-bottom:12px" id="perf-kpis"></div>
+    <!-- Bar chart -->
+    <div class="perf-chart-wrap" id="perf-chart-wrap">
+      <div class="perf-chart-title">Monthly P&amp;L ($)</div>
+      <div class="perf-bar-chart" id="perf-bar-chart"></div>
+    </div>
+    <!-- Two-column: book table + recent bets -->
+    <div class="perf-two-col">
+      <div>
+        <div class="section-title" style="margin-bottom:8px">By Sportsbook</div>
+        <div class="perf-book-table-wrap">
+          <table class="perf-book-table">
+            <thead><tr><th>Book</th><th>Bets</th><th>P&amp;L</th><th>ROI%</th></tr></thead>
+            <tbody id="perf-book-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Recent Settled Bets</div>
+        <div class="perf-recent-wrap">
+          <ul class="perf-recent-list" id="perf-recent-list"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---- Performance Tab JS (self-contained) ---- */
+(function() {
+  function fmt$(v) { return (v >= 0 ? '+' : '') + '$' + Math.abs(v).toFixed(2); }
+  function roiColor(r) { return r >= 0 ? 'var(--green)' : 'var(--red)'; }
+
+  function renderPerf(d) {
+    document.getElementById('perf-placeholder').style.display = 'none';
+    document.getElementById('perf-content').style.display = '';
+
+    const winRatePct = (d.win_rate * 100).toFixed(1);
+    const roi = d.roi_pct;
+    const netPl = d.net_profit;
+    const plSign = netPl >= 0 ? '+' : '';
+    document.getElementById('perf-kpis').innerHTML = `
+      <div class="kpi ${d.win_rate >= 0.5 ? 'green' : ''}">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value">${winRatePct}%</div>
+        <div class="kpi-sub">${d.wins}W / ${d.losses}L</div>
+      </div>
+      <div class="kpi ${roi >= 0 ? 'green' : ''}">
+        <div class="kpi-label">ROI</div>
+        <div class="kpi-value" style="color:${roiColor(roi)}">${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%</div>
+        <div class="kpi-sub">on ${d.settled_bets} settled</div>
+      </div>
+      <div class="kpi ${netPl >= 0 ? 'green' : ''}">
+        <div class="kpi-label">Net P&amp;L</div>
+        <div class="kpi-value" style="color:${roiColor(netPl)}">${plSign}$${Math.abs(netPl).toFixed(2)}</div>
+        <div class="kpi-sub">staked $${d.total_staked.toFixed(2)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Total Bets</div>
+        <div class="kpi-value">${d.total_bets}</div>
+        <div class="kpi-sub">${d.pending_bets} pending</div>
+      </div>
+    `;
+
+    const months = d.by_month || [];
+    if (months.length) {
+      const maxAbs = Math.max(1, ...months.map(m => Math.abs(m.profit)));
+      const chartHeight = 80;
+      const chart = document.getElementById('perf-bar-chart');
+      chart.innerHTML = months.map(m => {
+        const h = Math.max(3, (Math.abs(m.profit) / maxAbs) * chartHeight);
+        const pos = m.profit >= 0;
+        return `<div class="perf-bar-col">
+          <div class="perf-bar-value" style="color:${roiColor(m.profit)}">${fmt$(m.profit)}</div>
+          <div class="perf-bar ${pos ? 'positive' : 'negative'}" style="height:${h}px" title="${m.month}: ${fmt$(m.profit)} (${m.roi}% ROI)"></div>
+          <div class="perf-bar-label">${m.month.slice(5)}</div>
+        </div>`;
+      }).join('');
+    } else {
+      document.getElementById('perf-chart-wrap').style.display = 'none';
+    }
+
+    const books = d.by_book || [];
+    const bookBody = document.getElementById('perf-book-body');
+    if (books.length) {
+      bookBody.innerHTML = books.map(b => {
+        const plCls = b.profit >= 0 ? 'pos' : 'neg';
+        return `<tr>
+          <td style="font-weight:600">${esc(b.book)}</td>
+          <td>${b.bets}</td>
+          <td class="perf-profit ${plCls}">${fmt$(b.profit)}</td>
+          <td style="color:${roiColor(b.roi)};font-weight:700">${b.roi >= 0 ? '+' : ''}${b.roi.toFixed(1)}%</td>
+        </tr>`;
+      }).join('');
+    } else {
+      bookBody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);padding:12px">No data</td></tr>';
+    }
+
+    const recent = d.recent_bets || [];
+    const list = document.getElementById('perf-recent-list');
+    if (recent.length) {
+      list.innerHTML = recent.map(b => {
+        const isWin = b.result === 'win';
+        const resultLabel = isWin ? 'W' : 'L';
+        const plCls = b.profit >= 0 ? 'pos' : 'neg';
+        return `<li class="perf-recent-item">
+          <span class="perf-result-badge ${isWin ? 'win' : 'loss'}">${resultLabel}</span>
+          <span>
+            <strong>${esc(b.side)}</strong>
+            <span style="color:var(--muted);font-size:11px"> &mdash; ${esc(b.game)}</span>
+          </span>
+          <span class="perf-recent-meta">
+            <span style="color:var(--text-2)">${b.odds.toFixed(2)}</span>
+            &nbsp;&middot;&nbsp;$${b.stake.toFixed(2)}
+            &nbsp;&middot;&nbsp;<span class="perf-profit ${plCls}">${fmt$(b.profit)}</span>
+          </span>
+        </li>`;
+      }).join('');
+    } else {
+      list.innerHTML = '<li class="perf-recent-item" style="color:var(--muted)">No settled bets yet</li>';
+    }
+  }
+
+  function showPerfError(msg) {
+    const ph = document.getElementById('perf-placeholder');
+    ph.style.display = '';
+    ph.textContent = msg || 'No tracking data yet. Bets will appear here once recorded.';
+    document.getElementById('perf-content').style.display = 'none';
+  }
+
+  async function loadPerf() {
+    try {
+      const res = await fetch('/api/performance');
+      if (!res.ok) { showPerfError('Performance data unavailable.'); return; }
+      const d = await res.json();
+      if (d.settled_bets === 0 && !d._demo) {
+        showPerfError('No tracking data yet. Bets will appear here once recorded.');
+        return;
+      }
+      renderPerf(d);
+    } catch(e) {
+      showPerfError('No tracking data yet. Bets will appear here once recorded.');
+    }
+  }
+
+  loadPerf();
+})();
+</script>

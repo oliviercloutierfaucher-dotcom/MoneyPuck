@@ -1,0 +1,36 @@
+{# Shared Jinja2 macros for game cards, stat pills, and badges.
+   These are placeholder macros for now -- full server-side rendering
+   happens in Plans 02-03. #}
+
+{% macro game_card(game) %}
+<div class="game-card">
+  <div class="game-header">
+    <div class="game-matchup">
+      <span class="team-badge">{{ game.away }}</span>
+      <span class="vs">@</span>
+      <span class="team-badge">{{ game.home }}</span>
+    </div>
+  </div>
+  <div class="prob-buttons">
+    <div class="prob-btn">
+      <span class="prob-team">{{ game.away }}</span>
+      <span class="prob-pct">{{ (game.away_prob * 100)|round(1) }}%</span>
+    </div>
+    <div class="prob-btn">
+      <span class="prob-team">{{ game.home }}</span>
+      <span class="prob-pct">{{ (game.home_prob * 100)|round(1) }}%</span>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro stat_pill(label, value, color) %}
+<span class="kpi" style="{% if color %}color: {{ color }}{% endif %}">
+  <span class="kpi-label">{{ label }}</span>
+  <span class="kpi-value">{{ value }}</span>
+</span>
+{% endmacro %}
+
+{% macro badge(text, variant) %}
+<span class="badge {{ variant }}">{{ text }}</span>
+{% endmacro %}

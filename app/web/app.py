@@ -1035,7 +1035,8 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; script-src 'unsafe-inline'; "
+        "default-src 'self'; "
+        "script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
         "style-src 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com"
     )
@@ -1206,5 +1207,5 @@ def dashboard_page(
     return templates.TemplateResponse(
         request=request,
         name="base.html",
-        context={"data": data, "data_json": data_json},
+        context={"data": data, "data_json": data_json, "active_tab": "games"},
     )
