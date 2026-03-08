@@ -3,27 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Phase 6 context gathered
-last_updated: "2026-03-07T23:40:59.371Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-08T00:01:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
----
-
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: in_progress
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-07T16:50:00.000Z"
-progress:
-  total_phases: 11
-  completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 10
 ---
 
 # Project State
@@ -32,7 +18,7 @@ progress:
 **Milestone 1: Production-Ready Platform**
 
 ## Current Phase
-**Phase 4: Starting Goalies** — Complete (2026-03-07)
+**Phase 6: FastAPI Migration** — Plan 1/2 complete
 
 ## Completed Phases
 - **Phase 1: Persistent Storage** — Complete (2026-03-06)
@@ -46,10 +32,15 @@ progress:
   - DailyFaceoff scraper, 3-tier goalie resolution, pipeline integration
   - Confirmed goalies improve Brier by >0.005 on backup-start games
   - 528 tests passing
+- **Phase 5: Injury Impact System** — Complete (2026-03-07)
+  - ESPN injury fetcher, player tier classification, pipeline integration
+  - Dashboard shows key injuries on game cards
 
 ## Key Context
 - CI/CD pipeline active: GitHub Actions + Railway "Wait for CI" (Phase 2 complete)
-- Dashboard is single-file f-string HTML — migrating to FastAPI + Jinja2 (Phase 6-7)
+- FastAPI app created alongside old stdlib server (Phase 6 Plan 1 complete)
+- Jinja2 template replaces f-string for FastAPI rendering path
+- Old web_preview.py still active until Phase 6 Plan 2 switches over
 - Research docs in `.planning/research/` cover model, frontend, auth, ops
 
 ## Decisions
@@ -73,13 +64,23 @@ progress:
 - [Phase 05]: injury_adj in probability units (pp/100), not raw pp like goalie_adj
 - [Phase 05]: Dashboard shows only top-tier injuries (top6_f, top4_d, starting_g) to avoid clutter
 - [Phase 05]: build_market_snapshot returns 3-tuple (snapshot, games_rows, injuries) for transparency
+- [Phase 06]: Sync route handlers (def, not async def) because pipeline uses blocking requests
+- [Phase 06]: Keep render_dashboard() in presentation.py for CLI backward compatibility
+- [Phase 06]: Jinja2 template is new rendering path for FastAPI; old f-string stays for CLI
+- [Phase 06]: Security headers applied via middleware, matching existing PreviewHandler behavior
 
 ## Blockers
 (none)
 
 ## Last Session
-- **Stopped at:** Phase 6 context gathered
-- **Timestamp:** 2026-03-07T16:50:00Z
+- **Stopped at:** Completed 06-01-PLAN.md
+- **Timestamp:** 2026-03-08T00:01:00Z
+
+## Performance Metrics
+
+| Phase-Plan | Duration | Tasks | Files |
+|-----------|----------|-------|-------|
+| 06-01     | 6m32s    | 2     | 3     |
 
 ---
-*Last updated: 2026-03-07*
+*Last updated: 2026-03-08*
